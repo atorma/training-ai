@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Test/cache
+.pytest_cache/
+
+# Environment files
+.env
+
+# IntelliJ IDEA / PyCharm
+.idea/
+*.iml
+out/

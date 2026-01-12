@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "training-ai"
+version = "0.1.0"
+description = "Using OpenAI to do something with sports training data."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "openai==2.15.0",
+  "python-dotenv==1.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.0.2",
+]
+
+[project.scripts]
+training-ai = "cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["cli", "config"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
