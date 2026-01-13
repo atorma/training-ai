@@ -2686,7 +2686,6 @@ name = "training-ai"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "openai" },
     { name = "pydantic-ai" },
     { name = "python-dotenv" },
 ]
@@ -2698,10 +2697,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "openai", specifier = "==2.15.0" },
-    { name = "pydantic-ai", specifier = ">=1.41.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = "==9.0.2" },
-    { name = "python-dotenv", specifier = "==1.2.1" },
+    { name = "pydantic-ai", specifier = "==1.41.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
 provides-extras = ["dev"]
 

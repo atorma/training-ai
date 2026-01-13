@@ -1,6 +1,6 @@
 # Training AI
 
-CLI assistant that connects to an MCP server for training data and uses OpenAI for responses.
+CLI assistant that connects to an MCP server for training data and uses PydanticAI for responses.
 
 ## Setup
 
@@ -8,10 +8,8 @@ CLI assistant that connects to an MCP server for training data and uses OpenAI f
 
 The project does not come with an MCP server. If you are using Intervals.icu, 
 you can use [intervals-mcp-server](https://github.com/mvilanova/intervals-mcp-server). 
-
-The MCP server provide an SSE endpoint. The server must be reachable from the public internet 
-as OpenAI servers call it for both tool listing and invocation. You can use e.g. ngrok if running 
-an MCP server locally. 
+The MCP server provides an SSE endpoint. The CLI can connect to it directly, so the server only needs
+to be reachable from your machine.
 
 ### AI CLI
 
@@ -26,6 +24,6 @@ uv run training-ai
 
 ## Environment Variables
 
-- `OPENAI_API_KEY` - OpenAI API key.
-- `MCP_SERVER_URL` - Public MCP SSE endpoint (e.g., `https://<tunnel>/sse`).
-- `OPENAI_MODEL` - Optional model override (default: `gpt-4o-mini`).
+- `MCP_SERVER_URL` - MCP SSE endpoint (e.g., `http://localhost:8000/sse`).
+- `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
+- Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
