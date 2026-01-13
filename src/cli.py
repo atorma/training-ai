@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import sys
+import logfire
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 from config import load_config
+
+logfire.configure()
+logfire.instrument_pydantic_ai()
 
 SYSTEM_PROMPT = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
