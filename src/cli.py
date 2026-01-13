@@ -15,7 +15,8 @@ logfire.instrument_pydantic_ai()
 SYSTEM_PROMPT = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
     "If the question needs data you do not have, say so and suggest what you can provide. "
-    "Do not get daily data for over 14 days."
+    "When getting activities or wellness for a date range, do not get more than 14 days worth data. "
+    "If user request can be satisfied with one date, do so."
 )
 
 
