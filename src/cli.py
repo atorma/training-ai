@@ -4,7 +4,7 @@ import sys
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.mcp import MCPServerSSE
+from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 from config import load_config
 
@@ -27,7 +27,7 @@ def main() -> int:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 1
 
-    mcp_server = MCPServerSSE(config.mcp_server_url)
+    mcp_server = MCPServerStreamableHTTP(config.mcp_server_url)
     agent = Agent(config.model, system_prompt=SYSTEM_PROMPT, toolsets=[mcp_server])
     message_history: list[ModelMessage] = []
 

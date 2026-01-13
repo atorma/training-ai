@@ -8,8 +8,8 @@ CLI assistant that connects to an MCP server for training data and uses Pydantic
 
 The project does not come with an MCP server. If you are using Intervals.icu, 
 you can use [intervals-mcp-server](https://github.com/mvilanova/intervals-mcp-server). 
-The MCP server provides an SSE endpoint. The CLI can connect to it directly, so the server only needs
-to be reachable from your machine.
+The MCP server provides a streamable HTTP endpoint. The CLI can connect to it directly, 
+so the server only needs to be reachable from your machine.
 
 ### AI CLI
 
