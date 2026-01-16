@@ -2,22 +2,13 @@ from __future__ import annotations
 
 import sys
 import logfire
-
-from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 from config import load_config
+from training_agent import create_agent
 
 logfire.configure()
 logfire.instrument_pydantic_ai()
-
-SYSTEM_PROMPT = (
-    "You are a training assistant. You can access the user's training data through MCP tools. "
-    "If the question needs data you do not have, say so and suggest what you can provide. "
-    "When getting activities or wellness for a date range, do not get more than 14 days worth data. "
-    "If user request can be satisfied with one date, do so."
-)
 
 
 def _print_assistant(message: str | None) -> None:
@@ -32,8 +23,7 @@ def main() -> int:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 1
 
-    mcp_server = MCPServerStreamableHTTP(config.mcp_server_url)
-    agent = Agent(config.model, system_prompt=SYSTEM_PROMPT, toolsets=[mcp_server])
+    agent = create_agent(config)
     message_history: list[ModelMessage] = []
 
     print("Training AI chat. Type 'exit' or 'quit' to stop.")

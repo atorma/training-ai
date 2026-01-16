@@ -9,8 +9,10 @@ description = "Using OpenAI to do something with sports training data."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "pydantic-ai==1.41.0",
+  "pydantic-ai==1.43.0",
+  "pydantic-ai-slim[web]==1.43",
   "python-dotenv>=1.2.1",
+  "uvicorn>=0.29.0",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +25,7 @@ training-ai = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["cli", "config"]
+py-modules = ["cli", "config", "training_agent", "web"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

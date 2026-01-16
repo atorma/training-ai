@@ -22,8 +22,15 @@ uv sync --all-extras
 uv run training-ai
 ```
 
+### Web Chat UI
+
+```bash
+./run-web.sh
+# open http://127.0.0.1:8000
+```
+
 ## Environment Variables
 
-- `MCP_SERVER_URL` - MCP SSE endpoint (e.g., `http://localhost:8000/sse`).
+- `MCP_SERVER_URL` - MCP streamable HTTP endpoint (e.g., `http://localhost:3001/mcp`).
 - `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
 - Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
