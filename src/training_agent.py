@@ -5,7 +5,7 @@ from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 from config import Config
 
-SYSTEM_PROMPT = (
+BASIC_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
     "If the question needs data you do not have, say so and suggest what you can provide. "
     "When getting activities or wellness for a date range, do not get more than 14 days worth "
@@ -15,4 +15,4 @@ SYSTEM_PROMPT = (
 
 def create_agent(config: Config) -> Agent:
     mcp_server = MCPServerStreamableHTTP(config.mcp_server_url)
-    return Agent(config.model, system_prompt=SYSTEM_PROMPT, toolsets=[mcp_server])
+    return Agent(config.model, instructions=BASIC_INSTRUCTIONS, toolsets=[mcp_server])
