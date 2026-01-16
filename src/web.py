@@ -4,6 +4,7 @@ import logfire
 from starlette.applications import Starlette
 
 from config import load_config
+from summary_api import summary_handler
 from training_agent import create_agent
 
 
@@ -14,7 +15,9 @@ def create_app() -> Starlette:
     logfire.instrument_pydantic_ai()
 
     agent = create_agent(config)
-    return agent.to_web()
+    app = agent.to_web()
+    app.add_route("/summary", summary_handler, methods=["POST"], name="Training Summary")
+    return app
 
 
 app = create_app()
