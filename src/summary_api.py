@@ -5,7 +5,6 @@ from typing import Optional, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from pydantic_ai import Agent
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.status import (
@@ -14,6 +13,7 @@ from starlette.status import (
     HTTP_503_SERVICE_UNAVAILABLE,
 )
 from summary_agent import Summary
+from signal_sender import SignalSendError, SignalSender
 
 SUMMARY_USER_MESSAGE = "Summarize my activity and fitness development."
 
@@ -44,7 +44,7 @@ class SummaryResponse(BaseModel):
     activity_range: DateRange
     fitness_range: DateRange
     sent_signal: bool
-    signal_message_id: Optional[str] = None
+    signal_timestamp: Optional[str] = None
 
 
 def _format_validation_error(error: ValidationError) -> str:
@@ -64,7 +64,15 @@ def _compute_date_range(days: int, timezone: str) -> DateRange:
     return DateRange(start=start_date.isoformat(), end=end_date.isoformat())
 
 
-def create_summary_handler(agent: Agent[Summary, str]):
+class SummaryAgent(Protocol):
+    async def run(self, user_prompt: str, *, deps: Summary):
+        ...
+
+
+def create_summary_handler(
+    agent: SummaryAgent,
+    signal_sender: SignalSender | None = None,
+):
     async def summary_handler(request: Request) -> JSONResponse:
         try:
             payload = await request.json()
@@ -98,6 +106,12 @@ def create_summary_handler(agent: Agent[Summary, str]):
             fitness_end_date=fitness_range.end,
         )
 
+        if summary_request.send_signal and signal_sender is None:
+            return JSONResponse(
+                {"code": "signal_error", "message": "Signal API is not configured"},
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         try:
             result = await agent.run(SUMMARY_USER_MESSAGE, deps=deps)
         except Exception:
@@ -106,12 +120,26 @@ def create_summary_handler(agent: Agent[Summary, str]):
                 status_code=HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        signal_timestamp = None
+        sent_signal = False
+
+        if summary_request.send_signal:
+            try:
+                send_result = await signal_sender.send(result.output)
+            except SignalSendError as exc:
+                return JSONResponse(
+                    {"code": "signal_error", "message": str(exc)},
+                    status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            sent_signal = True
+            signal_timestamp = send_result.timestamp
+
         response = SummaryResponse(
             summary=result.output,
             activity_range=activity_range,
             fitness_range=fitness_range,
-            sent_signal=False,
-            signal_message_id=None,
+            sent_signal=sent_signal,
+            signal_timestamp=signal_timestamp,
         )
 
         return JSONResponse(response.model_dump(), status_code=HTTP_200_OK)

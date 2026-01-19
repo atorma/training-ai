@@ -25,7 +25,15 @@ training-ai = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["cli", "config", "summary_agent", "summary_api", "training_agent", "web"]
+py-modules = [
+  "cli",
+  "config",
+  "signal_sender",
+  "summary_agent",
+  "summary_api",
+  "training_agent",
+  "web",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"

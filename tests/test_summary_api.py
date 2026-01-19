@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 import summary_api
+from signal_sender import SignalSendError, SignalSendResult
 
 
 class FixedDateTime(real_datetime):
@@ -32,6 +33,19 @@ class StubAgent:
         self.last_message = user_prompt
         self.last_deps = deps
         return StubResult(self.output)
+
+
+class StubSignalSender:
+    def __init__(self, timestamp: str | None = None, error: Exception | None = None):
+        self.timestamp = timestamp
+        self.error = error
+        self.last_message = None
+
+    async def send(self, message: str) -> SignalSendResult:
+        self.last_message = message
+        if self.error:
+            raise self.error
+        return SignalSendResult(timestamp=self.timestamp)
 
 
 def make_request(body: bytes) -> Request:
@@ -127,3 +141,62 @@ def test_summary_handler_rejects_invalid_json():
     assert response.status_code == 400
     body = json.loads(response.body.decode("utf-8"))
     assert body["code"] == "validation_error"
+
+
+def test_summary_handler_sends_signal(monkeypatch):
+    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+    agent = StubAgent("stub summary")
+    sender = StubSignalSender(timestamp="abc123")
+    handler = summary_api.create_summary_handler(agent, sender)
+    payload = {
+        "activity_days": 1,
+        "fitness_days": 7,
+        "send_signal": True,
+        "timezone": "Europe/London",
+    }
+    request = make_request(json.dumps(payload).encode("utf-8"))
+
+    response = asyncio.run(handler(request))
+    assert response.status_code == 200
+    body = json.loads(response.body.decode("utf-8"))
+    assert body["sent_signal"] is True
+    assert body["signal_timestamp"] == "abc123"
+    assert sender.last_message == "stub summary"
+
+
+def test_summary_handler_rejects_signal_without_sender(monkeypatch):
+    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+    agent = StubAgent("stub summary")
+    handler = summary_api.create_summary_handler(agent)
+    payload = {
+        "activity_days": 1,
+        "fitness_days": 7,
+        "send_signal": True,
+        "timezone": "Europe/London",
+    }
+    request = make_request(json.dumps(payload).encode("utf-8"))
+
+    response = asyncio.run(handler(request))
+    assert response.status_code == 503
+    body = json.loads(response.body.decode("utf-8"))
+    assert body["code"] == "signal_error"
+    assert agent.last_message is None
+
+
+def test_summary_handler_rejects_signal_failure(monkeypatch):
+    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+    agent = StubAgent("stub summary")
+    sender = StubSignalSender(error=SignalSendError("nope"))
+    handler = summary_api.create_summary_handler(agent, sender)
+    payload = {
+        "activity_days": 1,
+        "fitness_days": 7,
+        "send_signal": True,
+        "timezone": "Europe/London",
+    }
+    request = make_request(json.dumps(payload).encode("utf-8"))
+
+    response = asyncio.run(handler(request))
+    assert response.status_code == 503
+    body = json.loads(response.body.decode("utf-8"))
+    assert body["code"] == "signal_error"

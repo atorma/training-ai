@@ -13,13 +13,24 @@ class Config:
     mcp_server_url: str
     mcp_basic_auth_username: str | None
     mcp_basic_auth_password: str | None
+    signal_api_url: str | None
+    signal_number: str | None
+    signal_basic_auth_username: str | None
+    signal_basic_auth_password: str | None
 
     def mcp_headers(self) -> dict[str, str] | None:
-        if self.mcp_basic_auth_username and self.mcp_basic_auth_password:
-            credentials = f"{self.mcp_basic_auth_username}:{self.mcp_basic_auth_password}"
-            encoded = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
-            return {"Authorization": f"Basic {encoded}"}
-        return None
+        return _basic_auth_header(self.mcp_basic_auth_username, self.mcp_basic_auth_password)
+
+    def signal_headers(self) -> dict[str, str] | None:
+        return _basic_auth_header(self.signal_basic_auth_username, self.signal_basic_auth_password)
+
+
+def _basic_auth_header(username: str | None, password: str | None) -> dict[str, str] | None:
+    if username and password:
+        credentials = f"{username}:{password}"
+        encoded = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+        return {"Authorization": f"Basic {encoded}"}
+    return None
 
 
 def load_config() -> Config:
@@ -41,4 +52,8 @@ def load_config() -> Config:
         mcp_server_url=mcp_server_url,
         mcp_basic_auth_username=os.getenv("MCP_BASIC_AUTH_USERNAME", "").strip() or None,
         mcp_basic_auth_password=os.getenv("MCP_BASIC_AUTH_PASSWORD", "").strip() or None,
+        signal_api_url=os.getenv("SIGNAL_API_URL", "").strip() or None,
+        signal_number=os.getenv("SIGNAL_NUMBER", "").strip() or None,
+        signal_basic_auth_username=os.getenv("SIGNAL_BASIC_AUTH_USERNAME", "").strip() or None,
+        signal_basic_auth_password=os.getenv("SIGNAL_BASIC_AUTH_PASSWORD", "").strip() or None,
     )
