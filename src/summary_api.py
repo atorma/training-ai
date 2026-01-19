@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic_ai import Agent
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
+from starlette.status import (
+    HTTP_200_OK,
+    HTTP_400_BAD_REQUEST,
+    HTTP_503_SERVICE_UNAVAILABLE,
+)
+from summary_agent import Summary
+
+SUMMARY_USER_MESSAGE = "Summarize my activity and fitness development."
 
 
 class SummaryRequest(BaseModel):
@@ -56,38 +64,56 @@ def _compute_date_range(days: int, timezone: str) -> DateRange:
     return DateRange(start=start_date.isoformat(), end=end_date.isoformat())
 
 
-async def summary_handler(request: Request) -> JSONResponse:
-    try:
-        payload = await request.json()
-    except Exception:
-        return JSONResponse(
-            {"code": "validation_error", "message": "Invalid JSON body"},
-            status_code=HTTP_400_BAD_REQUEST,
+def create_summary_handler(agent: Agent[Summary, str]):
+    async def summary_handler(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse(
+                {"code": "validation_error", "message": "Invalid JSON body"},
+                status_code=HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            summary_request = SummaryRequest.model_validate(payload)
+        except ValidationError as exc:
+            return JSONResponse(
+                {"code": "validation_error", "message": _format_validation_error(exc)},
+                status_code=HTTP_400_BAD_REQUEST,
+            )
+
+        activity_range = _compute_date_range(
+            summary_request.activity_days,
+            summary_request.timezone,
+        )
+        fitness_range = _compute_date_range(
+            summary_request.fitness_days,
+            summary_request.timezone,
         )
 
-    try:
-        summary_request = SummaryRequest.model_validate(payload)
-    except ValidationError as exc:
-        return JSONResponse(
-            {"code": "validation_error", "message": _format_validation_error(exc)},
-            status_code=HTTP_400_BAD_REQUEST,
+        deps = Summary(
+            activity_start_date=activity_range.start,
+            activity_end_date=activity_range.end,
+            fitness_start_date=fitness_range.start,
+            fitness_end_date=fitness_range.end,
         )
 
-    activity_range = _compute_date_range(
-        summary_request.activity_days,
-        summary_request.timezone,
-    )
-    fitness_range = _compute_date_range(
-        summary_request.fitness_days,
-        summary_request.timezone,
-    )
+        try:
+            result = await agent.run(SUMMARY_USER_MESSAGE, deps=deps)
+        except Exception:
+            return JSONResponse(
+                {"code": "summary_error", "message": "Summary generation failed"},
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-    response = SummaryResponse(
-        summary="Summary pending.",
-        activity_range=activity_range,
-        fitness_range=fitness_range,
-        sent_signal=False,
-        signal_message_id=None,
-    )
+        response = SummaryResponse(
+            summary=result.output,
+            activity_range=activity_range,
+            fitness_range=fitness_range,
+            sent_signal=False,
+            signal_message_id=None,
+        )
 
-    return JSONResponse(response.model_dump(), status_code=HTTP_200_OK)
+        return JSONResponse(response.model_dump(), status_code=HTTP_200_OK)
+
+    return summary_handler

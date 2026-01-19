@@ -17,6 +17,23 @@ class FixedDateTime(real_datetime):
         return real_datetime(2025, 3, 10, 12, 0, tzinfo=tz)
 
 
+class StubResult:
+    def __init__(self, output: str):
+        self.output = output
+
+
+class StubAgent:
+    def __init__(self, output: str):
+        self.output = output
+        self.last_message = None
+        self.last_deps = None
+
+    async def run(self, user_prompt: str, *, deps):
+        self.last_message = user_prompt
+        self.last_deps = deps
+        return StubResult(self.output)
+
+
 def make_request(body: bytes) -> Request:
     async def receive():
         return {"type": "http.request", "body": body, "more_body": False}
@@ -78,6 +95,8 @@ def test_summary_request_enforces_ranges():
 
 def test_summary_handler_returns_ranges(monkeypatch):
     monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+    agent = StubAgent("stub summary")
+    handler = summary_api.create_summary_handler(agent)
     payload = {
         "activity_days": 1,
         "fitness_days": 7,
@@ -86,19 +105,25 @@ def test_summary_handler_returns_ranges(monkeypatch):
     }
     request = make_request(json.dumps(payload).encode("utf-8"))
 
-    response = asyncio.run(summary_api.summary_handler(request))
+    response = asyncio.run(handler(request))
     assert response.status_code == 200
 
     body = json.loads(response.body.decode("utf-8"))
     assert body["activity_range"] == {"start": "2025-03-09", "end": "2025-03-09"}
     assert body["fitness_range"] == {"start": "2025-03-03", "end": "2025-03-09"}
     assert "summary" in body
+    assert agent.last_message == summary_api.SUMMARY_USER_MESSAGE
+    assert agent.last_deps.activity_start_date == "2025-03-09"
+    assert agent.last_deps.activity_end_date == "2025-03-09"
+    assert agent.last_deps.fitness_start_date == "2025-03-03"
+    assert agent.last_deps.fitness_end_date == "2025-03-09"
 
 
 def test_summary_handler_rejects_invalid_json():
+    handler = summary_api.create_summary_handler(StubAgent("stub summary"))
     request = make_request(b"not json")
 
-    response = asyncio.run(summary_api.summary_handler(request))
+    response = asyncio.run(handler(request))
     assert response.status_code == 400
     body = json.loads(response.body.decode("utf-8"))
     assert body["code"] == "validation_error"
