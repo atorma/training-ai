@@ -16,10 +16,12 @@ from starlette.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_503_SERVICE_UNAVAILABLE,
 )
+import os
+
 from summary_agent import Summary
 from signal_sender import SignalSendError, SignalSender
 
-SUMMARY_USER_MESSAGE = "Summarize my activity and fitness development."
+DEFAULT_USER_MESSAGE = "Summarize my activity and fitness development."
 LOGGER = logging.getLogger(__name__)
 
 
@@ -131,7 +133,8 @@ async def _generate_summary(
             activity_start=deps.activity_start_date, activity_end=deps.activity_end_date,
             fitness_start=deps.fitness_start_date, fitness_end=deps.fitness_end_date):
         try:
-            result = await agent.run(SUMMARY_USER_MESSAGE, deps=deps)
+            user_message = os.getenv("SUMMARY_USER_MESSAGE", DEFAULT_USER_MESSAGE)
+            result = await agent.run(user_message, deps=deps)
         except Exception:
             LOGGER.exception("summary.failed request_id=%s", request_id)
             logfire.exception("summary.failed")

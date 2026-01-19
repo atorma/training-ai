@@ -126,7 +126,7 @@ def test_summary_handler_returns_ranges(monkeypatch):
     assert body["activity_range"] == {"start": "2025-03-09", "end": "2025-03-09"}
     assert body["fitness_range"] == {"start": "2025-03-03", "end": "2025-03-09"}
     assert "summary" in body
-    assert agent.last_message == summary_api.SUMMARY_USER_MESSAGE
+    assert agent.last_message == summary_api.DEFAULT_USER_MESSAGE
     assert agent.last_deps.activity_start_date == "2025-03-09"
     assert agent.last_deps.activity_end_date == "2025-03-09"
     assert agent.last_deps.fitness_start_date == "2025-03-03"

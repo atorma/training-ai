@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 
 from config import Config
 
-SUMMARY_BASE_INSTRUCTIONS = (
+DEFAULT_BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
     "Get data for the provided dates only. Create concise summaries."
 )
@@ -26,10 +27,11 @@ def create_summary_agent(config: Config) -> Agent[Summary, str]:
         config.mcp_server_url,
         headers=config.mcp_headers(),
     )
+    base_instructions = os.getenv("SUMMARY_BASE_INSTRUCTIONS", DEFAULT_BASE_INSTRUCTIONS)
     agent = Agent[Summary, str](
         config.model,
         deps_type=Summary,
-        instructions=SUMMARY_BASE_INSTRUCTIONS,
+        instructions=base_instructions,
         toolsets=[mcp_server],
     )
 
