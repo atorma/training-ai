@@ -7,6 +7,7 @@ import uuid
 from typing import Optional, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import logfire
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -79,103 +80,111 @@ def create_summary_handler(
 ):
     async def summary_handler(request: Request) -> JSONResponse:
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
-        try:
-            payload = await request.json()
-        except Exception:
-            LOGGER.warning("summary.invalid_json request_id=%s", request_id)
-            return JSONResponse(
-                {"code": "validation_error", "message": "Invalid JSON body"},
-                status_code=HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            summary_request = SummaryRequest.model_validate(payload)
-        except ValidationError as exc:
-            LOGGER.warning("summary.validation_error request_id=%s error=%s", request_id, exc)
-            return JSONResponse(
-                {"code": "validation_error", "message": _format_validation_error(exc)},
-                status_code=HTTP_400_BAD_REQUEST,
-            )
-
-        activity_range = _compute_date_range(
-            summary_request.activity_days,
-            summary_request.timezone,
-        )
-        fitness_range = _compute_date_range(
-            summary_request.fitness_days,
-            summary_request.timezone,
-        )
-
-        deps = Summary(
-            activity_start_date=activity_range.start,
-            activity_end_date=activity_range.end,
-            fitness_start_date=fitness_range.start,
-            fitness_end_date=fitness_range.end,
-        )
-
-        LOGGER.info(
-            "summary.requested request_id=%s activity_range=%s..%s fitness_range=%s..%s",
-            request_id,
-            activity_range.start,
-            activity_range.end,
-            fitness_range.start,
-            fitness_range.end,
-        )
-
-        if summary_request.send_signal and signal_sender is None:
-            LOGGER.error("signal.not_configured request_id=%s", request_id)
-            return JSONResponse(
-                {"code": "signal_error", "message": "Signal API is not configured"},
-                status_code=HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        summary_start = time.monotonic()
-        try:
-            result = await agent.run(SUMMARY_USER_MESSAGE, deps=deps)
-        except Exception:
-            LOGGER.exception("summary.failed request_id=%s", request_id)
-            return JSONResponse(
-                {"code": "summary_error", "message": "Summary generation failed"},
-                status_code=HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        summary_elapsed = time.monotonic() - summary_start
-        LOGGER.info("summary.completed request_id=%s elapsed_s=%.3f", request_id, summary_elapsed)
-
-        signal_timestamp = None
-        sent_signal = False
-
-        if summary_request.send_signal:
-            signal_start = time.monotonic()
+        with logfire.span("activity_summary", request_id=request_id):
             try:
-                send_result = await signal_sender.send(result.output)
-            except SignalSendError as exc:
-                LOGGER.error(
-                    "signal.failed request_id=%s error=%s",
-                    request_id,
-                    exc,
-                )
+                payload = await request.json()
+            except Exception:
+                LOGGER.warning("summary.invalid_json request_id=%s", request_id)
                 return JSONResponse(
-                    {"code": "signal_error", "message": str(exc)},
+                    {"code": "validation_error", "message": "Invalid JSON body"},
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                summary_request = SummaryRequest.model_validate(payload)
+            except ValidationError as exc:
+                LOGGER.warning("summary.validation_error request_id=%s error=%s", request_id, exc)
+                return JSONResponse(
+                    {"code": "validation_error", "message": _format_validation_error(exc)},
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+
+            activity_range = _compute_date_range(
+                summary_request.activity_days,
+                summary_request.timezone,
+            )
+            fitness_range = _compute_date_range(
+                summary_request.fitness_days,
+                summary_request.timezone,
+            )
+
+            deps = Summary(
+                activity_start_date=activity_range.start,
+                activity_end_date=activity_range.end,
+                fitness_start_date=fitness_range.start,
+                fitness_end_date=fitness_range.end,
+            )
+
+            LOGGER.info(
+                "summary.requested request_id=%s activity_range=%s..%s fitness_range=%s..%s",
+                request_id,
+                activity_range.start,
+                activity_range.end,
+                fitness_range.start,
+                fitness_range.end,
+            )
+
+            if summary_request.send_signal and signal_sender is None:
+                LOGGER.error("signal.not_configured request_id=%s", request_id)
+                logfire.error("signal.not_configured request_id={request_id}", request_id=request_id)
+                return JSONResponse(
+                    {"code": "signal_error", "message": "Signal API is not configured"},
                     status_code=HTTP_503_SERVICE_UNAVAILABLE,
                 )
-            sent_signal = True
-            signal_timestamp = send_result.timestamp
-            signal_elapsed = time.monotonic() - signal_start
-            LOGGER.info(
-                "signal.sent request_id=%s elapsed_s=%.3f timestamp=%s",
-                request_id,
-                signal_elapsed,
-                signal_timestamp,
+
+            summary_start = time.monotonic()
+            with logfire.span("summary.create", request_id=request_id):
+                try:
+                    result = await agent.run(SUMMARY_USER_MESSAGE, deps=deps)
+                except Exception:
+                    LOGGER.exception("summary.failed request_id=%s", request_id)
+                    logfire.exception(
+                        "summary.failed request_id={request_id}", request_id=request_id)
+                    return JSONResponse(
+                        {"code": "summary_error", "message": "Summary generation failed"},
+                        status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+            summary_elapsed = time.monotonic() - summary_start
+            LOGGER.info("summary.completed request_id=%s elapsed_s=%.3f", request_id, summary_elapsed)
+
+            signal_timestamp = None
+            sent_signal = False
+
+            if summary_request.send_signal:
+                signal_start = time.monotonic()
+                with logfire.span("signal.send", request_id=request_id):
+                    try:
+                        send_result = await signal_sender.send(result.output)
+                    except SignalSendError as exc:
+                        LOGGER.error(
+                            "signal.failed request_id=%s error=%s",
+                            request_id,
+                            exc,
+                        )
+                        logfire.error(
+                            "signal.failed request_id={request_id}", request_id=request_id)
+                        return JSONResponse(
+                            {"code": "signal_error", "message": str(exc)},
+                            status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                        )
+                sent_signal = True
+                signal_timestamp = send_result.timestamp
+                signal_elapsed = time.monotonic() - signal_start
+                LOGGER.info(
+                    "signal.sent request_id=%s elapsed_s=%.3f timestamp=%s",
+                    request_id,
+                    signal_elapsed,
+                    signal_timestamp,
+                )
+
+            response = SummaryResponse(
+                summary=result.output,
+                activity_range=activity_range,
+                fitness_range=fitness_range,
+                sent_signal=sent_signal,
+                signal_timestamp=signal_timestamp,
             )
 
-        response = SummaryResponse(
-            summary=result.output,
-            activity_range=activity_range,
-            fitness_range=fitness_range,
-            sent_signal=sent_signal,
-            signal_timestamp=signal_timestamp,
-        )
-
-        return JSONResponse(response.model_dump(), status_code=HTTP_200_OK)
+            return JSONResponse(response.model_dump(), status_code=HTTP_200_OK)
 
     return summary_handler
