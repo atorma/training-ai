@@ -14,5 +14,8 @@ BASIC_INSTRUCTIONS = (
 
 
 def create_agent(config: Config) -> Agent:
-    mcp_server = MCPServerStreamableHTTP(config.mcp_server_url)
+    mcp_server = MCPServerStreamableHTTP(
+        config.mcp_server_url,
+        headers=config.mcp_headers(),
+    )
     return Agent(config.model, instructions=BASIC_INSTRUCTIONS, toolsets=[mcp_server])
