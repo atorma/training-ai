@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: training-ai-summary
+spec:
+  schedule: "0 4 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: summary-request
+              image: curlimages/curl:8.6.0
+              args:
+                - -fS
+                - -X
+                - POST
+                - "http://training-ai:7932/summary"
+                - -H
+                - "Content-Type: application/json"
+                - -d
+                - >-
+                  {"activity_days":1,"fitness_days":7,"send_signal":true,"timezone":"Europe/Helsinki"}
