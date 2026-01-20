@@ -1,0 +1,11 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: training-ai
+spec:
+  secretName: training-ai-certificate-secret
+  dnsNames:
+    - training-ai.atorma.fi
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer

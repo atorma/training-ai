@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  name: training-ai
+  labels:
+    app: training-ai
+spec:
+  selector:
+    app: training-ai
+  ports:
+    - protocol: TCP
+      port: 7932
+      targetPort: 7932
+  type: ClusterIP
+  

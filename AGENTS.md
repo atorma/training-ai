@@ -5,7 +5,7 @@
 - Source code should live in `src/` (flat modules like `src/cli.py`).
 - Tests should live in `tests/` and mirror the source tree (e.g., `tests/utils/test_dates.py` for `src/utils/dates.py`).
 - Supporting materials belong in `docs/`, `scripts/`, and `assets/`.
-- Kubernetes manifests belong in `k8s/`.
+- Deployment scripts belong in `deployment` and Kubernetes manifests in `deployment/k8s/`.
 - Keep modules small and single-purpose; prefer explicit entry points like `src/cli.py` or `src/main.py`.
 
 ## Build, Test, and Development Commands

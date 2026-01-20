@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: training-ai
+  labels:
+    app: training-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: training-ai
+  template:
+    metadata:
+      name: training-ai
+      labels:
+        app: training-ai
+    spec:
+      containers:
+        - name: training-ai-server
+          image: training-ai-server-image
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 7932
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 5m
+              memory: 10Mi
+          env:
+            - name: MODEL
+              value: openai:gpt-5.2
+            - name: MCP_SERVER_URL
+              value: http://intervals-mcp-service:8000/mcp
+            - name: SIGNAL_API_URL
+              value: http://signal-api:8080
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: training-ai-secrets
+                  key: OPENAI_API_KEY
+            - name: SIGNAL_NUMBER
+              valueFrom:
+                secretKeyRef:
+                  name: training-ai-secrets
+                  key: SIGNAL_NUMBER
+            - name: LOGFIRE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: training-ai-secrets
+                  key: LOGFIRE_TOKEN
+            - name: LOGFIRE_ENVIRONMENT
+              value: production
+            - name: SUMMARY_BASE_INSTRUCTIONS
+              valueFrom:
+                secretKeyRef:
+                  name: training-ai-base-instructions
+                  key: SUMMARY_BASE_INSTRUCTIONS
+            - name: SUMMARY_USER_MESSAGE
+              value: Create a concise summary of my activities and fitness development over the provided time ranges.
+      restartPolicy: Always
