@@ -27,7 +27,7 @@ def create_summary_agent(config: Config) -> Agent[Summary, str]:
         config.mcp_server_url,
         headers=config.mcp_headers(),
     )
-    base_instructions = os.getenv("SUMMARY_BASE_INSTRUCTIONS", DEFAULT_BASE_INSTRUCTIONS)
+    base_instructions = os.getenv("BASE_INSTRUCTIONS", DEFAULT_BASE_INSTRUCTIONS)
     agent = Agent[Summary, str](
         config.model,
         deps_type=Summary,

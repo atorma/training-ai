@@ -62,11 +62,13 @@ spec:
                   key: LOGFIRE_TOKEN
             - name: LOGFIRE_ENVIRONMENT
               value: production
-            - name: SUMMARY_BASE_INSTRUCTIONS
+            - name: BASE_INSTRUCTIONS
               valueFrom:
                 secretKeyRef:
                   name: training-ai-base-instructions
-                  key: SUMMARY_BASE_INSTRUCTIONS
+                  key: BASE_INSTRUCTIONS
             - name: SUMMARY_USER_MESSAGE
-              value: Create a concise summary of my activities and fitness development over the provided time ranges.
+              value: |
+                Create a concise summary of my activities and fitness development
+                over the provided time ranges. Respond in plain text.
       restartPolicy: Always
