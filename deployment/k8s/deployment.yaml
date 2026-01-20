@@ -38,6 +38,16 @@ spec:
             requests:
               cpu: 5m
               memory: 10Mi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false # Needs access to write files
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: MODEL
               value: openai:gpt-5.2
