@@ -80,5 +80,10 @@ spec:
             - name: SUMMARY_USER_MESSAGE
               value: |
                 Create a concise summary of my activities and fitness development
-                over the provided time ranges. Respond in plain text.
+                over the provided time ranges. Respond in plain text. Do not 
+                summarize by numbers but by words: how tough an activity was,
+                was the activity long or short, what aspects it developed. If my 
+                estimated FTP changes, that can be told in numbers.
+                For fitness tell me if I'm increasing or decreasing my fitness
+                and how my form has been. Also give a suggestion for the next day's workouts.
       restartPolicy: Always
