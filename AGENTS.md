@@ -33,3 +33,17 @@
 ## Security & Configuration
 
 - Never commit secrets. Use `.env` for local overrides and provide `.env.example` for required keys.
+
+## Personal Agent Context
+
+This project uses `.agent/` as the source of truth for agent context.
+
+At the start of work, read:
+1. `.agent/rules/`
+2. `.agent/purpose.md`
+3. `.agent/memory.md`
+4. last 5–10 entries in `.agent/session-log.md`
+5. relevant `.agent/docs/`
+
+Before marking work complete, update `.agent/memory.md` and append
+to `.agent/session-log.md`.

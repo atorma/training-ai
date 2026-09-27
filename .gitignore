@@ -29,3 +29,7 @@ docs/specs/
 
 # Agent instructions
 instructions
+
+# Personal persistent agent context
+.agent/
+.codex
