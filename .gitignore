@@ -33,3 +33,6 @@ instructions
 # Personal persistent agent context
 .agent/
 .codex
+
+# Operating systems
+.DS_Store
