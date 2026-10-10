@@ -14,15 +14,15 @@
 
 ## Build, Test, and Development Commands
 
-- `uv venv` - create a local virtual environment. Needs to be done once after cloning the repo.
-- `source .venv/bin/activate` - activate the environment.
-- `uv sync --all-extras` - install runtime + dev dependencies from `pyproject.toml`.
-- `uv run training-ai` - run the CLI chat assistant.
-- `uv run python -m cli` - run the CLI from the repo without installing.
-- `pytest` - run the full test suite.
-- `uv run prek install` - install the Git pre-commit hook once per clone.
-- `uv run prek run --all-files` - run all configured hooks.
-- `uv run ruff check .` and `uv run ruff format --check .` - check Python without edits.
+Use Make targets for development tasks.
+
+- `make bootstrap` - install locked dependencies and Git hooks (requires Make and uv).
+- `make lint` - check Python and tracked Markdown without modifying source files.
+- `make lint-fix` - apply formatting and supported lint fixes.
+- `make build` - create Python packages in `dist/`; optional for local development.
+- `make run-web` - start the local web server and current UI on port 7932 with reload.
+- `make run-cli` - start the interactive CLI agent.
+- `make test` - run fast pytest tests; browser/Playwright tests are separate.
 
 ## Coding Style & Naming Conventions
 
@@ -36,7 +36,7 @@
   line limit; code blocks and tables are exempt.
 - Python, TypeScript, and Markdown must have lint checks run through pre-commit hooks.
   Python and Markdown hooks are configured; TypeScript hooks are pending. Install hooks
-  once per clone using the command above.
+  once per clone using `make bootstrap`.
 
 ## Testing Guidelines
 

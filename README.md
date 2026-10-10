@@ -16,26 +16,23 @@ so the server only needs to be reachable from your machine.
 ```bash
 cp .env.example .env
 # edit .env with your keys and MCP server URL
-uv venv --python 3.12
-source .venv/bin/activate 
-uv sync --all-extras --locked
-uv run training-ai
+make bootstrap
+make run-cli
 ```
 
 ### Web Chat UI
 
 ```bash
-./run-web.sh
-# open http://127.0.0.1:8000
+make run-web
+# open http://127.0.0.1:7932
 ```
 
 ## Development checks
 
-Install development dependencies and enable the Git hooks once per clone:
+With Make and uv installed, install development dependencies and enable Git hooks once per clone:
 
 ```bash
-uv sync --all-extras --locked
-uv run prek install
+make bootstrap
 ```
 
 The hooks use prek with `.pre-commit-config.yaml`. On each commit, Ruff applies safe lint
@@ -46,10 +43,9 @@ length and targets Python 3.12.
 Run checks across the repository:
 
 ```bash
-uv run prek run --all-files
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
+make lint      # read-only Python and Markdown checks
+make lint-fix  # apply formatting and supported lint fixes
+make test      # fast pytest suite; no Playwright
 ```
 
 Markdown files are checked with markdownlint-cli2, with automatic fixes where supported.
@@ -60,6 +56,12 @@ The first run downloads the hook and its dependencies. Run just the Markdown che
 ```bash
 uv run prek run markdownlint-cli2 --all-files
 ```
+
+`make run-web` starts the local server with reload, serving the current chat UI. Configure `.env`
+first. `make build` creates Python wheel/source packages in `dist/`; it is optional for local
+development. There is no separate frontend compilation step yet. `make lint-fix` can exit
+with a failure status when hooks fix files; review the changes and rerun it. Markdown hooks
+check tracked files; new Markdown files must be staged first.
 
 Keep the Ruff hook revision aligned with the Ruff development dependency when upgrading.
 TypeScript hooks will be added separately.
