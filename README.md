@@ -5,6 +5,7 @@ Training assistant with CLI and persistent web conversations, using PydanticAI a
 ## Documentation
 
 - [Data model](docs/data-model.md)
+- [Database migrations](docs/database-migrations.md)
 - [Application components](docs/application-components.md)
 - [Frontend–backend communication](docs/frontend-backend.md)
 
@@ -77,6 +78,7 @@ Run checks across the repository:
 ```bash
 make lint      # read-only Python and Markdown checks
 make lint-fix  # apply formatting and supported lint fixes
+make hooks     # pre-commit hooks, including new unstaged files
 make test      # fast pytest suite; no Playwright
 make install-browser  # reinstall Chromium separately if needed
 make test-e2e         # real app and SQLite, deterministic test model
@@ -85,10 +87,10 @@ make test-e2e         # real app and SQLite, deterministic test model
 Markdown files are checked with markdownlint-cli2, with automatic fixes where supported.
 Prose has a 100-character line limit; code blocks and tables are exempt. The hook uses
 an isolated Node.js 22 environment managed by prek; no global Node upgrade is needed.
-The first run downloads the hook and its dependencies. Run just the Markdown check with:
+The first run downloads the hook and its dependencies. Run the configured hooks with:
 
 ```bash
-uv run prek run markdownlint-cli2 --all-files
+make hooks
 ```
 
 `make run-web` builds the frontend and starts the local server with reload. Configure `.env`
@@ -97,7 +99,7 @@ first. After frontend changes, restart this command to rebuild; Python changes r
 packages in `dist/`, including static assets. Node is build tooling, not a production server.
 `make lint-fix` can exit
 with a failure status when hooks fix files; review the changes and rerun it. Markdown hooks
-check tracked files; new Markdown files must be staged first.
+check tracked files; `make hooks` also includes new, unstaged files and excludes ignored files.
 
 Keep the Ruff hook revision aligned with the Ruff development dependency when upgrading.
 Frontend hooks run ESLint, Prettier, and TypeScript checks using the locked npm dependencies.

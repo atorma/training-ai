@@ -20,6 +20,7 @@ Use Make targets for development tasks.
   (requires Make, uv, Node.js, and npm).
 - `make lint` - check Python and tracked Markdown without modifying source files.
 - `make lint-fix` - apply formatting and supported lint fixes.
+- `make hooks` - run pre-commit hooks on tracked and untracked, nonignored files.
 - `make build` - create Python packages in `dist/`; optional for local development.
 - `make build-web` - compile the React frontend into Python's static assets.
 - `make run-web` - start the local web server and current UI on port 7932 with reload.

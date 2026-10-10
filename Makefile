@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix build build-web run-web run-cli test test-e2e install-browser
+.PHONY: bootstrap lint lint-fix hooks build build-web run-web run-cli test test-e2e install-browser
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -19,6 +19,10 @@ lint:
 lint-fix:
 	$(NPM) run lint-fix
 	$(UV) run --locked prek run --all-files
+
+# Include new, unstaged files as well as tracked files; ignored files stay excluded.
+hooks:
+	git ls-files --cached --others --exclude-standard -z | xargs -0 $(UV) run --locked prek run --files
 
 build: build-web
 	$(UV) build
