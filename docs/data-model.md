@@ -74,3 +74,8 @@ stateDiagram-v2
 | Scope | Web conversations only; CLI history and `/summary` output are not stored here |
 
 Local restarts retain data. GKE persistent storage and backups still need configuration.
+
+All schema changes and persistent data transformations use the shared, versioned migration
+runner at startup under the process ownership lock. The current schema is migration 1;
+existing version-1 databases are preserved. See [database migrations](database-migrations.md)
+for the required workflow, transaction rules, tests, and deployment recovery.

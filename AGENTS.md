@@ -11,6 +11,9 @@
 - Start with endpoint handlers calling concrete query/command objects that wrap database
   access and expose domain objects and mutation operations. Add service layers only when
   behavior warrants them; avoid speculative abstractions.
+- All database schema changes and persistent data migrations must use the shared runner
+  and append-only registry in `src/database_migrations.py`. Never edit applied migrations.
+  Follow `docs/database-migrations.md` and add real-SQLite upgrade/data-preservation tests.
 
 ## Build, Test, and Development Commands
 

@@ -12,6 +12,8 @@ from uuid import uuid4
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 
+from database_migrations import migrate
+
 
 class MissingThread(Exception):
     pass
@@ -60,29 +62,7 @@ class ConversationStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.execute("PRAGMA journal_mode = WAL")
-            db.executescript("""
-                CREATE TABLE IF NOT EXISTS threads (
-                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
-                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS messages (
-                    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-                    sequence INTEGER NOT NULL, payload TEXT NOT NULL,
-                    PRIMARY KEY (thread_id, sequence)
-                );
-                CREATE TABLE IF NOT EXISTS runs (
-                    id TEXT PRIMARY KEY,
-                    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-                    status TEXT NOT NULL CHECK (
-                        status IN ('running', 'completed', 'failed', 'interrupted')
-                    ),
-                    user_sequence INTEGER NOT NULL, created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE UNIQUE INDEX IF NOT EXISTS one_active_run
-                    ON runs(thread_id) WHERE status = 'running';
-                PRAGMA user_version = 1;
-            """)
+            migrate(db)
 
     def interrupt_runs(self):
         with self.connection() as db:
@@ -104,7 +84,11 @@ class ConversationStore:
             id=str(uuid4()), title="New conversation", created_at=timestamp, updated_at=timestamp
         )
         with self.connection() as db:
-            db.execute("INSERT INTO threads VALUES (:id, :title, :created_at, :updated_at)", thread)
+            db.execute(
+                "INSERT INTO threads (id, title, created_at, updated_at) "
+                "VALUES (:id, :title, :created_at, :updated_at)",
+                thread,
+            )
         return thread
 
     def _require_thread(self, db, thread_id):
@@ -173,7 +157,7 @@ class ConversationStore:
                     [ModelRequest(parts=[UserPromptPart(text)])]
                 ).decode()
                 db.execute(
-                    "INSERT INTO messages VALUES (?, ?, ?)",
+                    "INSERT INTO messages (thread_id, sequence, payload) VALUES (?, ?, ?)",
                     (thread_id, sequence, json.dumps(json.loads(payload)[0])),
                 )
                 if sequence == 1:
@@ -190,7 +174,8 @@ class ConversationStore:
                 updated_at=timestamp,
             )
             db.execute(
-                "INSERT INTO runs VALUES (:id, :thread_id, :status, :user_sequence, "
+                "INSERT INTO runs (id, thread_id, status, user_sequence, created_at, updated_at) "
+                "VALUES (:id, :thread_id, :status, :user_sequence, "
                 ":created_at, :updated_at)",
                 run,
             )
@@ -214,7 +199,7 @@ class ConversationStore:
             payloads = json.loads(ModelMessagesTypeAdapter.dump_json(list(messages)))
             for offset, payload in enumerate(payloads, 1):
                 db.execute(
-                    "INSERT INTO messages VALUES (?, ?, ?)",
+                    "INSERT INTO messages (thread_id, sequence, payload) VALUES (?, ?, ?)",
                     (run["thread_id"], sequence + offset, json.dumps(payload)),
                 )
             timestamp = now()

@@ -28,7 +28,8 @@ flowchart TD
 | --- | --- | --- |
 | Web entry point | Load configuration, create agents, register routes, serve built UI | [web.py](../src/web.py) |
 | Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/conversation_api.py) |
-| Conversation store | SQLite schema, transactions, ordered history, run state and process lock | [conversation_store.py](../src/conversation_store.py) |
+| Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/conversation_store.py) |
+| Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/database_migrations.py) |
 | Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/conversation_events.py) |
 | Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_agent.py) |
 | Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
