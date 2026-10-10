@@ -16,6 +16,11 @@ dist/
 # Test/cache
 .pytest_cache/
 .ruff_cache/
+data/
+node_modules/
+src/web_assets/static/
+playwright-report/
+test-results/
 
 # Environment files
 .env

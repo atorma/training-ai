@@ -26,16 +26,23 @@ dev = [
 training-ai = "cli:main"
 
 [tool.setuptools]
+include-package-data = false
 package-dir = {"" = "src"}
 py-modules = [
   "cli",
   "config",
+  "conversation_api",
+  "conversation_store",
   "signal_sender",
   "summary_agent",
   "summary_api",
   "training_agent",
   "web",
 ]
+packages = ["web_assets"]
+
+[tool.setuptools.package-data]
+web_assets = ["static/index.html", "static/assets/*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

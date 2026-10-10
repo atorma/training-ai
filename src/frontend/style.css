@@ -1,0 +1,163 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #20332c;
+  background: #f7faf8;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid #c8d6ce;
+  border-radius: 7px;
+  padding: 9px 13px;
+  background: white;
+  color: inherit;
+}
+button:hover {
+  background: #edf4ef;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button[aria-current] {
+  background: #dbeee1;
+  border-color: #51946b;
+}
+.app {
+  display: flex;
+  height: 100dvh;
+}
+aside {
+  width: 260px;
+  padding: 20px;
+  border-right: 1px solid #dce5df;
+  overflow-y: auto;
+}
+h1 {
+  font-size: 22px;
+}
+nav {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+nav button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #dce5df;
+}
+h2 {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.thread-actions {
+  display: flex;
+  gap: 8px;
+}
+.thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.transcript {
+  overflow-y: auto;
+  flex: 1;
+  padding: 24px;
+}
+.message {
+  max-width: 850px;
+  margin: 0 auto 18px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid #e0e8e2;
+  overflow-wrap: anywhere;
+}
+.message[data-role="user"] {
+  background: #e6f2e9;
+}
+.message pre {
+  overflow-x: auto;
+}
+.message-timestamp {
+  display: block;
+  margin-top: 8px;
+  color: #5d7164;
+  font-size: 12px;
+}
+.composer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #dce5df;
+}
+.composer textarea {
+  flex: 1;
+  min-height: 65px;
+  max-height: 200px;
+  resize: none;
+  border: 1px solid #bccfc3;
+  border-radius: 8px;
+  padding: 12px;
+}
+.empty {
+  text-align: center;
+  color: #5d7164;
+}
+.error,
+.run-status {
+  padding: 12px 24px;
+  margin: 0;
+}
+.error {
+  color: #a21c2f;
+}
+.run-status {
+  background: #fff5dc;
+}
+.run-status button {
+  margin-left: 12px;
+}
+.tool-result {
+  font-size: 14px;
+}
+@media (max-width: 650px) {
+  aside {
+    width: 155px;
+    padding: 10px;
+  }
+  header {
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+  .transcript {
+    padding: 12px;
+  }
+  .composer {
+    padding: 10px;
+    gap: 6px;
+  }
+}

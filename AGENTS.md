@@ -16,13 +16,17 @@
 
 Use Make targets for development tasks.
 
-- `make bootstrap` - install locked dependencies and Git hooks (requires Make and uv).
+- `make bootstrap` - install locked dependencies, Git hooks, and Playwright Chromium
+  (requires Make, uv, Node.js, and npm).
 - `make lint` - check Python and tracked Markdown without modifying source files.
 - `make lint-fix` - apply formatting and supported lint fixes.
 - `make build` - create Python packages in `dist/`; optional for local development.
+- `make build-web` - compile the React frontend into Python's static assets.
 - `make run-web` - start the local web server and current UI on port 7932 with reload.
 - `make run-cli` - start the interactive CLI agent.
 - `make test` - run fast pytest tests; browser/Playwright tests are separate.
+- `make install-browser` - reinstall Chromium separately; bootstrap includes installation.
+- `make test-e2e` - test browser flows against the real local API and temporary SQLite.
 
 ## Coding Style & Naming Conventions
 
@@ -35,7 +39,7 @@ Use Make targets for development tasks.
 - markdownlint-cli2 checks and fixes changed Markdown files. Prose has a 100-character
   line limit; code blocks and tables are exempt.
 - Python, TypeScript, and Markdown must have lint checks run through pre-commit hooks.
-  Python and Markdown hooks are configured; TypeScript hooks are pending. Install hooks
+  Python, TypeScript, and Markdown hooks are configured. Install hooks
   once per clone using `make bootstrap`.
 
 ## Testing Guidelines

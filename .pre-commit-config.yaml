@@ -1,4 +1,18 @@
 repos:
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: ESLint and Prettier (frontend)
+        entry: npm run lint
+        language: system
+        files: ^(src/frontend/|tests/frontend/|.*\.config\.(ts|js)$|package(-lock)?\.json$|tsconfig\.json$|index\.html$)
+        pass_filenames: false
+      - id: frontend-types
+        name: TypeScript (frontend)
+        entry: npm exec tsc -- --noEmit -p tsconfig.json
+        language: system
+        files: ^(src/frontend/|tests/frontend/|.*\.config\.ts$|tsconfig\.json$)
+        pass_filenames: false
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.0
     hooks:
