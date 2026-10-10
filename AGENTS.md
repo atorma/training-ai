@@ -19,15 +19,20 @@
 - `uv run training-ai` - run the CLI chat assistant.
 - `uv run python -m cli` - run the CLI from the repo without installing.
 - `pytest` - run the full test suite.
+- `uv run prek install` - install the Git pre-commit hook once per clone.
+- `uv run prek run --all-files` - run all configured hooks.
+- `uv run ruff check .` and `uv run ruff format --check .` - check Python without edits.
 
 ## Coding Style & Naming Conventions
 
 - Indentation: 4 spaces for Python.
 - Filenames: `kebab-case` for docs/scripts, `snake_case` for Python modules, `PascalCase` for class names.
-- Follow PEP 8 and keep lines under 100 characters unless a formatter enforces otherwise.
-- If a formatter/linter is added (e.g., Ruff), keep this section aligned with it.
+- Ruff formats Python with a 100-character line length and Python 3.12 target.
+- Ruff checks core errors, unused code/imports, import sorting, and Bugbear rules.
+- prek runs Ruff safe fixes followed by formatting on changed Python files at commit time.
 - Python, TypeScript, and Markdown must have lint checks run through pre-commit hooks.
-  Tool selection and hook configuration are pending; do not assume hooks are installed.
+  Python hooks are configured; TypeScript and Markdown hooks are pending. Install hooks
+  once per clone using the command above.
 
 ## Testing Guidelines
 

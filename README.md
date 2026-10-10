@@ -18,7 +18,7 @@ cp .env.example .env
 # edit .env with your keys and MCP server URL
 uv venv --python 3.12
 source .venv/bin/activate 
-uv sync --all-extras
+uv sync --all-extras --locked
 uv run training-ai
 ```
 
@@ -28,6 +28,32 @@ uv run training-ai
 ./run-web.sh
 # open http://127.0.0.1:8000
 ```
+
+## Development checks
+
+Install development dependencies and enable the Git hooks once per clone:
+
+```bash
+uv sync --all-extras --locked
+uv run prek install
+```
+
+The hooks use prek with `.pre-commit-config.yaml`. On each commit, Ruff applies safe lint
+fixes, sorts imports, and formats changed Python files. If a hook changes files, review and
+stage those changes before retrying the commit. Python formatting uses a 100-character line
+length and targets Python 3.12.
+
+Run checks across the repository:
+
+```bash
+uv run prek run --all-files
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+```
+
+Keep the Ruff hook revision aligned with the Ruff development dependency when upgrading.
+TypeScript and Markdown hooks will be added separately; the initial hooks cover Python.
 
 ## Environment Variables
 

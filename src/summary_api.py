@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+import os
 import time
 import uuid
+from datetime import datetime, timedelta
 from typing import Optional, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -16,10 +17,9 @@ from starlette.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_503_SERVICE_UNAVAILABLE,
 )
-import os
 
+from signal_sender import SignalSender, SignalSendError
 from summary_agent import Summary
-from signal_sender import SignalSendError, SignalSender
 
 DEFAULT_USER_MESSAGE = "Summarize my activity and fitness development."
 LOGGER = logging.getLogger(__name__)
@@ -72,8 +72,7 @@ def _compute_date_range(days: int, timezone: str) -> DateRange:
 
 
 class SummaryAgent(Protocol):
-    async def run(self, user_prompt: str, *, deps: Summary):
-        ...
+    async def run(self, user_prompt: str, *, deps: Summary): ...
 
 
 def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
@@ -123,15 +122,18 @@ def _build_summary_deps(summary_request: SummaryRequest) -> tuple[DateRange, Dat
 
 
 async def _generate_summary(
-        agent: SummaryAgent,
-        deps: Summary,
-        request_id: str,
+    agent: SummaryAgent,
+    deps: Summary,
+    request_id: str,
 ) -> tuple[str | None, JSONResponse | None]:
     summary_start = time.monotonic()
     with logfire.span(
-            "summary.create: activities {activity_start}..{activity_end}, fitness={fitness_start}..{fitness_end}",
-            activity_start=deps.activity_start_date, activity_end=deps.activity_end_date,
-            fitness_start=deps.fitness_start_date, fitness_end=deps.fitness_end_date):
+        "summary.create: activities {activity_start}..{activity_end}, fitness={fitness_start}..{fitness_end}",
+        activity_start=deps.activity_start_date,
+        activity_end=deps.activity_end_date,
+        fitness_start=deps.fitness_start_date,
+        fitness_end=deps.fitness_end_date,
+    ):
         try:
             user_message = os.getenv("SUMMARY_USER_MESSAGE", DEFAULT_USER_MESSAGE)
             result = await agent.run(user_message, deps=deps)
@@ -149,9 +151,9 @@ async def _generate_summary(
 
 
 async def _send_signal(
-        signal_sender: SignalSender,
-        message: str,
-        request_id: str,
+    signal_sender: SignalSender,
+    message: str,
+    request_id: str,
 ) -> tuple[str | None, JSONResponse | None]:
     signal_start = time.monotonic()
     with logfire.span("signal.send"):
@@ -176,8 +178,8 @@ async def _send_signal(
 
 
 def create_summary_handler(
-        agent: SummaryAgent,
-        signal_sender: SignalSender | None = None,
+    agent: SummaryAgent,
+    signal_sender: SignalSender | None = None,
 ):
     async def summary_handler(request: Request) -> JSONResponse:
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())

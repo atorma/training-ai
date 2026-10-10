@@ -18,8 +18,7 @@ class SignalSendResult:
 
 
 class SignalSender(Protocol):
-    async def send(self, message: str) -> SignalSendResult:
-        ...
+    async def send(self, message: str) -> SignalSendResult: ...
 
 
 class SignalSenderHttp:

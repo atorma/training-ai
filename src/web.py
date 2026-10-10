@@ -4,9 +4,9 @@ import logfire
 from starlette.applications import Starlette
 
 from config import load_config
-from summary_api import create_summary_handler
-from summary_agent import create_summary_agent
 from signal_sender import build_signal_sender
+from summary_agent import create_summary_agent
+from summary_api import create_summary_handler
 from training_agent import create_agent
 
 

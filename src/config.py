@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import base64
 import os
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 

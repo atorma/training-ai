@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+
 import logfire
 from pydantic_ai.messages import ModelMessage
 
