@@ -3,7 +3,8 @@
 ## Project Structure & Module Organization
 
 - Source code should live in `src/` (flat modules like `src/cli.py`).
-- Tests should live in `tests/` and mirror the source tree (e.g., `tests/utils/test_dates.py` for `src/utils/dates.py`).
+- Tests should live in `tests/` and mirror the source tree
+  (e.g., `tests/utils/test_dates.py` for `src/utils/dates.py`).
 - Supporting materials belong in `docs/`, `scripts/`, and `assets/`.
 - Deployment scripts belong in `deployment` and Kubernetes manifests in `deployment/k8s/`.
 - Keep modules small and single-purpose; prefer explicit entry points like `src/cli.py` or `src/main.py`.
@@ -26,12 +27,15 @@
 ## Coding Style & Naming Conventions
 
 - Indentation: 4 spaces for Python.
-- Filenames: `kebab-case` for docs/scripts, `snake_case` for Python modules, `PascalCase` for class names.
+- Filenames: `kebab-case` for docs/scripts, `snake_case` for Python modules,
+  `PascalCase` for class names.
 - Ruff formats Python with a 100-character line length and Python 3.12 target.
 - Ruff checks core errors, unused code/imports, import sorting, and Bugbear rules.
 - prek runs Ruff safe fixes followed by formatting on changed Python files at commit time.
+- markdownlint-cli2 checks and fixes changed Markdown files. Prose has a 100-character
+  line limit; code blocks and tables are exempt.
 - Python, TypeScript, and Markdown must have lint checks run through pre-commit hooks.
-  Python hooks are configured; TypeScript and Markdown hooks are pending. Install hooks
+  Python and Markdown hooks are configured; TypeScript hooks are pending. Install hooks
   once per clone using the command above.
 
 ## Testing Guidelines
@@ -55,6 +59,7 @@
 This project uses `.agent/` as the source of truth for agent context.
 
 At the start of work, read:
+
 1. `.agent/rules/`
 2. `.agent/purpose.md`
 3. `.agent/memory.md`
