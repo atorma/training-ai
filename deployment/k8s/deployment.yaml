@@ -50,7 +50,7 @@ spec:
                 - ALL
           env:
             - name: MODEL
-              value: openai:gpt-5.2
+              value: openai:gpt-6.1-sol
             - name: MCP_SERVER_URL
               value: http://intervals-mcp-service:8000/mcp
             - name: SIGNAL_API_URL
