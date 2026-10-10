@@ -38,6 +38,7 @@ button[aria-current] {
 }
 aside {
   width: 260px;
+  flex-shrink: 0;
   padding: 20px;
   border-right: 1px solid #dce5df;
   overflow-y: auto;
@@ -70,7 +71,58 @@ header {
 }
 h2 {
   font-size: 18px;
-  overflow-wrap: anywhere;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-control {
+  display: none;
+}
+.icon-button {
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 26px;
+}
+.conversation-dialog {
+  color: inherit;
+  background: #f7faf8;
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(320px, calc(100vw - 48px));
+  height: 100dvh;
+  max-height: none;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+.conversation-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.conversation-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.new-conversation {
+  width: 100%;
+}
+.mobile-thread-actions {
+  inset: 64px 12px auto auto;
+  margin: 0;
+  border: 1px solid #c8d6ce;
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 15%);
 }
 .thread-actions {
   display: flex;
@@ -116,6 +168,7 @@ h2 {
 }
 .composer textarea {
   flex: 1;
+  min-width: 0;
   min-height: 65px;
   max-height: 200px;
   resize: none;
@@ -145,19 +198,53 @@ h2 {
   font-size: 14px;
 }
 @media (max-width: 650px) {
-  aside {
-    width: 155px;
-    padding: 10px;
+  .sidebar,
+  .thread-actions {
+    display: none;
+  }
+  .mobile-control {
+    display: flex;
+  }
+  .mobile-thread-actions:popover-open {
+    display: grid;
+    gap: 4px;
+  }
+  button {
+    min-height: 44px;
+  }
+  .conversation-dialog nav button {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
   }
   header {
-    flex-wrap: wrap;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
+  }
+  header h2 {
+    flex: 1;
+    font-size: 16px;
   }
   .transcript {
     padding: 12px;
   }
+  .message {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
   .composer {
     padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
     gap: 6px;
+  }
+  .composer textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+}
+@media (min-width: 651px) {
+  .mobile-thread-actions {
+    display: none;
   }
 }

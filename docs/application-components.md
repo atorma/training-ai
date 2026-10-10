@@ -51,6 +51,7 @@ flowchart LR
 - Node is build tooling. The application server is Python; no Assistant Cloud integration.
 - Local access has no application login. Deployment manifests apply Basic Auth at the ingress.
 - Optional Logfire instrumentation is configured by the Python entry points.
+- On narrow screens, navigation opens in a modal drawer; thread actions use a compact popover.
 - Uvicorn allows five seconds for graceful shutdown before cancelling open SSE connections.
 
 See [data model](data-model.md) and [frontend communication](frontend-backend.md).

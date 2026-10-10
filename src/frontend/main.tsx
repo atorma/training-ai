@@ -125,6 +125,42 @@ function MessageTimestamp() {
   );
 }
 
+function ConversationList({
+  threads,
+  selected,
+  busy,
+  select,
+}: {
+  threads: Thread[];
+  selected: string | null;
+  busy: boolean;
+  select: (id: string | null) => void;
+}) {
+  return (
+    <>
+      <button
+        className="new-conversation"
+        disabled={busy}
+        onClick={() => select(null)}
+      >
+        New conversation
+      </button>
+      <nav aria-label="Conversations">
+        {threads.map((thread) => (
+          <button
+            key={thread.id}
+            disabled={busy}
+            aria-current={selected === thread.id ? "page" : undefined}
+            onClick={() => select(thread.id)}
+          >
+            {thread.title}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+}
+
 function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selected, setSelected] = useState<string | null>(() =>
@@ -142,9 +178,14 @@ function App() {
   const requestVersion = useRef(0);
   const pendingNewThread = useRef<string | null>(null);
   const selectedRef = useRef(selected);
+  const navigationDialog = useRef<HTMLDialogElement>(null);
+  const actionsPopover = useRef<HTMLDivElement>(null);
   selectedRef.current = selected;
 
   const select = useCallback((id: string | null) => {
+    navigationDialog.current?.close();
+    actionsPopover.current?.hidePopover();
+    if (id !== null && id === selectedRef.current) return;
     requestVersion.current++;
     pendingNewThread.current = null;
     selectedRef.current = id;
@@ -156,6 +197,18 @@ function App() {
       "",
       id ? `?thread=${encodeURIComponent(id)}` : "/",
     );
+  }, []);
+
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 650px)");
+    const closeMobilePanels = () => {
+      if (!mobile.matches) {
+        navigationDialog.current?.close();
+        actionsPopover.current?.hidePopover();
+      }
+    };
+    mobile.addEventListener("change", closeMobilePanels);
+    return () => mobile.removeEventListener("change", closeMobilePanels);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -301,6 +354,44 @@ function App() {
   }
 
   const running = detail?.run?.status === "running";
+  const conversationList = (
+    <ConversationList
+      threads={threads}
+      selected={selected}
+      busy={busy}
+      select={select}
+    />
+  );
+  const threadActions = detail && (
+    <>
+      <button
+        disabled={busy}
+        onClick={() => {
+          actionsPopover.current?.hidePopover();
+          const title = prompt("Conversation title", detail.title);
+          if (title?.trim())
+            void action(async () => {
+              await api(`/${detail.id}`, "PATCH", { title });
+            });
+        }}
+      >
+        Rename
+      </button>
+      <button
+        disabled={busy || running}
+        onClick={() => {
+          actionsPopover.current?.hidePopover();
+          if (confirm("Delete this conversation and all its messages?"))
+            void action(async () => {
+              await api(`/${detail.id}`, "DELETE");
+              select(null);
+            });
+        }}
+      >
+        Delete
+      </button>
+    </>
+  );
   const runtime = useExternalStoreRuntime({
     messages: [
       ...messages(detail),
@@ -329,56 +420,75 @@ function App() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="app">
-        <aside>
+        <aside className="sidebar">
           <h1>Training AI</h1>
-          <button disabled={busy} onClick={() => select(null)}>
-            New conversation
-          </button>
-          <nav aria-label="Conversations">
-            {threads.map((t) => (
-              <button
-                key={t.id}
-                disabled={busy}
-                aria-current={selected === t.id ? "page" : undefined}
-                onClick={() => select(t.id)}
-              >
-                {t.title}
-              </button>
-            ))}
-          </nav>
+          {conversationList}
         </aside>
+        <dialog
+          id="conversation-dialog"
+          ref={navigationDialog}
+          className="conversation-dialog"
+          aria-labelledby="conversation-dialog-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget)
+              navigationDialog.current?.close();
+          }}
+        >
+          <div className="conversation-dialog-header">
+            <h2 id="conversation-dialog-title">Conversations</h2>
+            <button
+              className="icon-button"
+              aria-label="Close conversations"
+              onClick={() => navigationDialog.current?.close()}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          {conversationList}
+        </dialog>
         <main>
           <header>
-            <h2>{detail?.title ?? "New conversation"}</h2>
+            <button
+              className="icon-button mobile-control"
+              aria-label="Open conversations"
+              aria-haspopup="dialog"
+              aria-controls="conversation-dialog"
+              onClick={() => navigationDialog.current?.showModal()}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h2 title={detail?.title ?? "New conversation"}>
+              {detail?.title ?? "New conversation"}
+            </h2>
             {detail && (
-              <div className="thread-actions">
+              <>
+                <div className="thread-actions">{threadActions}</div>
                 <button
-                  disabled={busy}
-                  onClick={() => {
-                    const title = prompt("Conversation title", detail.title);
-                    if (title?.trim())
-                      void action(async () => {
-                        await api(`/${detail.id}`, "PATCH", { title });
-                      });
-                  }}
+                  className="icon-button mobile-control"
+                  aria-label="Conversation actions"
+                  popoverTarget="mobile-thread-actions"
                 >
-                  Rename
+                  <span aria-hidden="true">⋯</span>
                 </button>
-                <button
-                  disabled={busy || running}
-                  onClick={() => {
-                    if (
-                      confirm("Delete this conversation and all its messages?")
-                    )
-                      void action(async () => {
-                        await api(`/${detail.id}`, "DELETE");
-                        select(null);
-                      });
-                  }}
+                <div
+                  ref={actionsPopover}
+                  id="mobile-thread-actions"
+                  className="mobile-thread-actions"
+                  popover="auto"
                 >
-                  Delete
-                </button>
-              </div>
+                  {threadActions}
+                </div>
+              </>
             )}
           </header>
           {error && (
