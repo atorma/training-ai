@@ -9,8 +9,8 @@ description = "Using OpenAI to do something with sports training data."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "pydantic-ai==1.43.0",
-  "pydantic-ai-slim[web]==1.43",
+  "pydantic-ai==2.55.0",
+  "pydantic-ai-slim[web]==2.55.0",
   "python-dotenv>=1.2.1",
   "uvicorn>=0.29.0",
 ]

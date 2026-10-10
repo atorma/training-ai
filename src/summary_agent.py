@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.mcp import MCPServerStreamableHTTP
+from pydantic_ai.mcp import MCPToolset
 
 from config import Config
 
@@ -23,7 +23,7 @@ class Summary:
 
 
 def create_summary_agent(config: Config) -> Agent[Summary, str]:
-    mcp_server = MCPServerStreamableHTTP(
+    mcp_server = MCPToolset(
         config.mcp_server_url,
         headers=config.mcp_headers(),
     )

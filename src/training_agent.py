@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from pydantic_ai import Agent
-from pydantic_ai.mcp import MCPServerStreamableHTTP
+from pydantic_ai.mcp import MCPToolset
 
 from config import Config
 
@@ -16,7 +16,7 @@ BASE_INSTRUCTIONS = (
 
 
 def create_agent(config: Config) -> Agent:
-    mcp_server = MCPServerStreamableHTTP(
+    mcp_server = MCPToolset(
         config.mcp_server_url,
         headers=config.mcp_headers(),
     )

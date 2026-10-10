@@ -71,3 +71,7 @@ TypeScript hooks will be added separately.
 - `MCP_SERVER_URL` - MCP streamable HTTP endpoint (e.g., `http://localhost:3001/mcp`).
 - `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
 - Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
+
+For OpenAI models using reasoning with MCP tools, select the Responses API explicitly,
+for example `MODEL=openai-responses:gpt-6.1-sol`. PydanticAI 2 also defaults `openai:` to Responses;
+`openai-chat:` explicitly selects Chat Completions.
