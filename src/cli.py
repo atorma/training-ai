@@ -8,9 +8,6 @@ from pydantic_ai.messages import ModelMessage
 from config import load_config
 from training_agent import create_agent
 
-logfire.configure()
-logfire.instrument_pydantic_ai()
-
 
 def _print_assistant(message: str | None) -> None:
     if message:
@@ -23,6 +20,9 @@ def main() -> int:
     except RuntimeError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 1
+
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai()
 
     agent = create_agent(config)
     message_history: list[ModelMessage] = []

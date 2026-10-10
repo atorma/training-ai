@@ -13,7 +13,7 @@ from training_agent import create_agent
 def create_app() -> Starlette:
     config = load_config()
 
-    logfire.configure()
+    logfire.configure(send_to_logfire="if-token-present")
     logfire.instrument_pydantic_ai()
 
     agent = create_agent(config)
