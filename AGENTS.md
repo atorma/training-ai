@@ -7,6 +7,9 @@
 - Supporting materials belong in `docs/`, `scripts/`, and `assets/`.
 - Deployment scripts belong in `deployment` and Kubernetes manifests in `deployment/k8s/`.
 - Keep modules small and single-purpose; prefer explicit entry points like `src/cli.py` or `src/main.py`.
+- Start with endpoint handlers calling concrete query/command objects that wrap database
+  access and expose domain objects and mutation operations. Add service layers only when
+  behavior warrants them; avoid speculative abstractions.
 
 ## Build, Test, and Development Commands
 
@@ -23,12 +26,20 @@
 - Filenames: `kebab-case` for docs/scripts, `snake_case` for Python modules, `PascalCase` for class names.
 - Follow PEP 8 and keep lines under 100 characters unless a formatter enforces otherwise.
 - If a formatter/linter is added (e.g., Ruff), keep this section aligned with it.
+- Python, TypeScript, and Markdown must have lint checks run through pre-commit hooks.
+  Tool selection and hook configuration are pending; do not assume hooks are installed.
 
 ## Testing Guidelines
 
 - Add tests for all new functionality and bug fixes.
 - Default naming: `tests/**/test_*.py`.
 - Prefer fast, deterministic tests; keep integration tests clearly labeled.
+- Prefer API tests exercising the real application and a real temporary SQLite database.
+  Avoid unit tests built around mocked internal collaborators or database operations.
+- Cover important happy paths with browser-level end-to-end tests against the real API
+  and database. Cover edge cases primarily at the API level or deeper where necessary.
+- Add focused tests for important services only when their behavior merits separate coverage.
+- Keep architecture shallow; do not add layers merely to make them mockable.
 
 ## Security & Configuration
 
