@@ -27,7 +27,7 @@ build-web:
 	$(NPM) run build
 
 run-web: build-web
-	$(UV) run --locked uvicorn web:app --host 0.0.0.0 --port 7932 --reload
+	$(UV) run --locked uvicorn web:app --host 0.0.0.0 --port 7932 --reload --timeout-graceful-shutdown 5
 
 run-cli:
 	$(UV) run --locked training-ai

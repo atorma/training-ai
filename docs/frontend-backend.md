@@ -2,6 +2,7 @@
 
 The browser calls same-origin JSON endpoints using [api.ts](../src/frontend/api.ts).
 [main.tsx](../src/frontend/main.tsx) maps saved PydanticAI records into assistant-ui messages.
+[stream.ts](../src/frontend/stream.ts) uses the AI SDK to read live Vercel protocol events.
 
 ## Sending a message
 
@@ -24,19 +25,21 @@ sequenceDiagram
     API-->>UI: 202 run
     Task->>DB: Load full saved history
     Task->>Agent: Run with message history
-    loop Poll after each refresh, with a 1-second delay
-        UI->>API: GET thread list and selected thread
-        API->>DB: Read metadata, messages and latest run
-        API-->>UI: JSON snapshots
+    UI->>API: Subscribe to run events
+    loop Text, reasoning and tool activity
+        Agent-->>Task: Native agent event
+        Task-->>API: Buffer encoded Vercel protocol event
+        API-->>UI: SSE event
     end
     Agent-->>Task: Completed result
     Task->>DB: Commit new messages and completed status
+    API-->>UI: Stream ends and thread-change notification
     UI->>API: GET selected thread
     API-->>UI: Saved reply and completed run
     Note over UI,Task: Closing the browser does not cancel generation
 ```
 
-Replies appear after completion. There is no token streaming, SSE or WebSocket connection.
+Generation runs independently of both SSE subscriptions. No WebSocket connection is needed.
 
 ## Endpoints
 
@@ -53,6 +56,8 @@ Implemented in [conversation_api.py](../src/conversation_api.py).
 | POST | `/api/threads/{id}/messages` | `{"text":"..."}` | `202`: new running run |
 | POST | `/api/threads/{id}/retry` | — | `202`: new run reusing the saved prompt |
 | GET | `/api/health` | — | `200`: `{"status":"ok"}` |
+| GET | `/api/events` | — | `200`: SSE `ready` / `changed` notifications |
+| GET | `/api/threads/{id}/runs/{run_id}/events` | — | `200`: Vercel AI SDK v7 SSE stream |
 
 | Response shape | Fields |
 | --- | --- |
@@ -63,7 +68,15 @@ Implemented in [conversation_api.py](../src/conversation_api.py).
 
 ## Synchronization and errors
 
-- Refreshes fetch the list and selected detail in parallel with `cache: "no-store"`.
+- Initial load, selection, mutations and SSE notifications trigger snapshot fetches.
+- Refreshes fetch the list and selected detail in parallel with `cache: "no-store"`; no polling.
+- The change channel reconnects automatically and sends `ready` before fetching fresh snapshots.
+- Active run subscriptions replay from the beginning into a fresh reader, then follow live events.
+- Live content replaces the previous live snapshot; completion replaces it with saved messages.
+- Transport/refresh failures retry with backoff; reconnects never resubmit the user prompt.
+- Heartbeat comments every 15 seconds keep idle connections open; SSE responses disable buffering.
+- Replay uses a temporary buffer per active run, spilling to a temporary file above 256 KiB.
+- Completed streams leave the active registry; reopening retrieves saved history from SQLite.
 - Detail includes the full saved history; there is no pagination.
 - `?thread=<id>` records the selected conversation for reopening or sharing across browsers.
 - Selection/version checks discard stale detail responses after switching threads.
@@ -71,6 +84,7 @@ Implemented in [conversation_api.py](../src/conversation_api.py).
 - `400`: malformed/empty input, message over 32,000 characters, or title over 200 characters.
 - `404`: missing thread; the UI clears a deleted selection.
 - `409`: active run blocks another send/retry/delete, or the latest run cannot be retried.
+- Run subscriptions also return `409` after completion; the browser reloads saved thread detail.
 - Rejected sends restore the composer draft. A refresh failure after acceptance does not resend it.
 - On restart, unfinished runs become `interrupted`; retry is manual and creates a new run.
 

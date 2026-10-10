@@ -61,6 +61,7 @@ stateDiagram-v2
 
 - Retry creates a **new run** for the latest failed/interrupted prompt without duplicating it.
 - Failed/interrupted runs retain the saved prompt; partial generated output is not saved.
+- Active SSE replay buffers are temporary and separate from SQLite; restarts discard them.
 - Generation receives the full saved history. Context summaries are not implemented.
 
 ## Storage

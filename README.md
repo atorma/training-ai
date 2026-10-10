@@ -40,15 +40,17 @@ make run-web
 The assistant-ui frontend uses this application's API and SQLite database, without
 Assistant Cloud. Create, reopen, rename, and delete conversations from the sidebar.
 Open the same server from another browser to continue a saved conversation.
-Generation continues when you switch threads or close your browser. Replies appear when
-complete; the UI polls the server every second rather than streaming individual tokens.
+Generation continues when you switch threads or close your browser. Replies, reasoning,
+and tool activity stream over SSE. Thread changes also arrive through SSE notifications.
+Reconnecting or reopening an active thread replays its response so far, then follows live events.
 
 By default, conversations are stored in `data/conversations.sqlite3`; set `DATABASE_PATH`
 to choose another location. This directory is ignored by Git. Restarting preserves messages
 and marks unfinished responses interrupted so you can retry. Failed responses also support
 retry. One response may run per thread; separate threads can run independently.
 
-Run one server process with one worker against the database. CLI history remains temporary.
+Run one server process with one worker against the database. Active stream replay buffers
+are temporary; they do not survive a server restart. CLI history remains temporary.
 Long conversations currently send their full history to the model; context summarization
 is a subsequent step. Local access uses no application login; the existing deployed ingress
 applies Basic Auth to all routes. Persistent GKE storage and backups still need configuration

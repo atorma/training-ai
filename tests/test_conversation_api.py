@@ -29,6 +29,18 @@ def create_thread(client):
     return response.json()["id"]
 
 
+def stream_response(respond):
+    """Expose existing synthetic response fixtures through the streamed model API."""
+
+    async def stream(messages, info):
+        response = await respond(messages, info)
+        for part in response.parts:
+            if isinstance(part, TextPart):
+                yield part.content
+
+    return stream
+
+
 def test_threads_persist_full_history_and_tool_results(tmp_path):
     agent = Agent(TestModel())
 
@@ -82,7 +94,9 @@ def test_one_active_run_and_independent_threads(tmp_path):
             await asyncio.sleep(0.01)
         return ModelResponse(parts=[TextPart("Finished after disconnect")])
 
-    app = create_conversation_app(Agent(FunctionModel(respond)), tmp_path / "chat.sqlite3")
+    app = create_conversation_app(
+        Agent(FunctionModel(stream_function=stream_response(respond))), tmp_path / "chat.sqlite3"
+    )
     with TestClient(app) as client:
         thread_id = create_thread(client)
         other_id = create_thread(client)
@@ -142,7 +156,10 @@ def test_failed_response_can_be_retried(tmp_path):
         return ModelResponse(parts=[TextPart(" | ".join(prompts))])
 
     with TestClient(
-        create_conversation_app(Agent(FunctionModel(respond)), tmp_path / "chat.sqlite3")
+        create_conversation_app(
+            Agent(FunctionModel(stream_function=stream_response(respond))),
+            tmp_path / "chat.sqlite3",
+        )
     ) as client:
         thread_id = create_thread(client)
         endpoint = f"/api/threads/{thread_id}"

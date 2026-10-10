@@ -15,6 +15,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { api, ApiError, type Detail, type Thread } from "./api";
+import { readRun } from "./stream";
 import "./style.css";
 
 function messages(detail: Detail | null): ThreadMessageLike[] {
@@ -32,10 +33,15 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
     > = [];
     for (const p of m.payload.parts) {
       if (
-        (p.part_kind === "text" || p.part_kind === "user-prompt") &&
+        (p.part_kind === "text" ||
+          p.part_kind === "user-prompt" ||
+          p.part_kind === "thinking") &&
         typeof p.content === "string"
       ) {
-        content.push({ type: "text", text: p.content });
+        content.push({
+          type: p.part_kind === "thinking" ? "reasoning" : "text",
+          text: p.content,
+        });
       } else if (p.part_kind === "tool-call") {
         let args = p.args;
         if (typeof args === "string") {
@@ -89,6 +95,7 @@ function Message() {
       <MessagePrimitive.Parts
         components={{
           Text: () => <MarkdownTextPrimitive />,
+          Reasoning: () => <MarkdownTextPrimitive />,
           tools: { Fallback: ToolResult },
         }}
       />
@@ -126,6 +133,12 @@ function App() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState<{
+    threadId: string;
+    runId: string;
+    message: ThreadMessageLike;
+  } | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const requestVersion = useRef(0);
   const pendingNewThread = useRef<string | null>(null);
   const selectedRef = useRef(selected);
@@ -169,22 +182,79 @@ function App() {
   }, [select]);
 
   useEffect(() => {
+    const source = new EventSource("/api/events");
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
+    let delay = 1000;
+    const update = async () => {
+      clearTimeout(timer);
       try {
         await refresh();
+        delay = 1000;
       } catch (e) {
-        if (!stopped) setError(String(e));
+        if (!stopped) {
+          setError(String(e));
+          timer = setTimeout(() => void update(), delay);
+          delay = Math.min(delay * 2, 10000);
+        }
       }
-      if (!stopped) timer = setTimeout(poll, 1000);
     };
-    void poll();
+    source.addEventListener("ready", () => {
+      setReconnecting(false);
+      void update();
+    });
+    source.addEventListener("changed", () => void update());
+    source.onerror = () => setReconnecting(true);
     return () => {
       stopped = true;
       clearTimeout(timer);
+      source.close();
     };
+  }, [refresh]);
+
+  useEffect(() => {
+    void refresh().catch((e) => setError(String(e)));
   }, [refresh, selected]);
+
+  const runningId = detail?.run?.status === "running" ? detail.run.id : null;
+  useEffect(() => {
+    if (!selected || !runningId) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let delay = 1000;
+    const connect = async () => {
+      try {
+        await readRun(selected, runningId, controller.signal, (message) => {
+          setLive({ threadId: selected, runId: runningId, message });
+        });
+        await refresh();
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        // Finished between the snapshot and subscription, or failed during generation.
+        let refreshed = false;
+        try {
+          await refresh();
+          refreshed = true;
+        } catch (refreshError) {
+          if (!controller.signal.aborted) setError(String(refreshError));
+        }
+        if (controller.signal.aborted) return;
+        if (
+          !refreshed ||
+          !(e instanceof ApiError && (e.status === 404 || e.status === 409))
+        ) {
+          // Transport retries attach to the existing run; they never resubmit the prompt.
+          timer = setTimeout(() => void connect(), delay);
+          delay = Math.min(delay * 2, 10000);
+        }
+      }
+    };
+    void connect();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [selected, runningId, refresh]);
 
   async function action(fn: () => Promise<void>) {
     setBusy(true);
@@ -232,7 +302,12 @@ function App() {
 
   const running = detail?.run?.status === "running";
   const runtime = useExternalStoreRuntime({
-    messages: messages(detail),
+    messages: [
+      ...messages(detail),
+      ...(live && live.threadId === selected && live.runId === runningId
+        ? [live.message]
+        : []),
+    ],
     convertMessage: (message: ThreadMessageLike) => message,
     isRunning: running,
     isDisabled: busy || (!!selected && !detail),
@@ -311,6 +386,7 @@ function App() {
               {error}
             </p>
           )}
+          {reconnecting && <p role="status">Reconnecting to server…</p>}
           {(detail?.run?.status === "failed" ||
             detail?.run?.status === "interrupted") && (
             <div role="status" className="run-status">
