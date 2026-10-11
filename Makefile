@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web run-web run-cli test test-e2e install-browser
+.PHONY: bootstrap lint lint-fix hooks build build-web run-web run-cli test test-e2e install-browser render-k8s render-k8s-storage
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -45,3 +45,10 @@ test-e2e: build-web
 
 install-browser:
 	$(NPM) exec playwright install chromium
+
+# Render locally without contacting a cluster or applying changes.
+render-k8s:
+	kubectl kustomize deployment/k8s/app
+
+render-k8s-storage:
+	kubectl kustomize deployment/k8s/storage

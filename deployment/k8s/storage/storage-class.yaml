@@ -1,0 +1,16 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: training-ai-balanced
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-balanced
+  csi.storage.k8s.io/fstype: ext4
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+allowedTopologies:
+  - matchLabelExpressions:
+      - key: topology.gke.io/zone
+        values:
+          - europe-west1-b

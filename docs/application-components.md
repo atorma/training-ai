@@ -30,6 +30,7 @@ flowchart TD
 | Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/conversation_api.py) |
 | Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/conversation_store.py) |
 | Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/database_migrations.py) |
+| Upgrade backup | Checked SQLite backup under the ownership lock before Kubernetes upgrades | [database_backup.py](../src/database_backup.py) |
 | Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/conversation_events.py) |
 | Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_agent.py) |
 | Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
@@ -56,3 +57,4 @@ flowchart LR
 - Uvicorn allows five seconds for graceful shutdown before cancelling open SSE connections.
 
 See [data model](data-model.md) and [frontend communication](frontend-backend.md).
+See [Kubernetes deployment](kubernetes-deployment.md) for storage, backups, and rollout recovery.

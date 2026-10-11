@@ -34,6 +34,7 @@ py-modules = [
   "conversation_api",
   "conversation_events",
   "conversation_store",
+  "database_backup",
   "database_migrations",
   "signal_sender",
   "summary_agent",

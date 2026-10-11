@@ -6,6 +6,9 @@ metadata:
     app: training-ai
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
+  progressDeadlineSeconds: 1200
   selector:
     matchLabels:
       app: training-ai
@@ -15,6 +18,31 @@ spec:
       labels:
         app: training-ai
     spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: training-ai-data
+      initContainers:
+        - name: database-backup
+          image: training-ai-server-image
+          imagePullPolicy: Always
+          command: ["python", "-m", "database_backup"]
+          args: ["/app/data/conversations.sqlite3", "/app/data/backups"]
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: training-ai-server
           image: training-ai-server-image
@@ -22,6 +50,16 @@ spec:
           ports:
             - containerPort: 7932
               name: http
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /api/health
@@ -49,6 +87,8 @@ spec:
               drop:
                 - ALL
           env:
+            - name: DATABASE_PATH
+              value: /app/data/conversations.sqlite3
             - name: MODEL
               value: openai:gpt-6.1-sol
             - name: MCP_SERVER_URL

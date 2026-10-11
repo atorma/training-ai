@@ -71,11 +71,14 @@ an active WAL database's main file can omit committed changes.
 Stop the previous server before starting the upgraded single-worker application. Migrations
 run automatically at startup; there is no separate migration command or downgrade runner.
 Allow startup time for backfills or table rebuilds and sufficient disk space for copies.
+The [Kubernetes deployment](kubernetes-deployment.md) uses `Recreate`, a pre-upgrade backup
+init container, and a startup probe to support this sequence.
 
 Prefer a new forward migration to correct an applied change. Rolling back application code
 does not roll back the database. If the older application cannot use the migrated schema,
 restore the pre-upgrade backup with the older application; this loses writes made after
-that backup. Automatic backups and restore tooling are not implemented here.
+that backup. Kubernetes creates checked pre-upgrade backups on the same persistent disk;
+scheduled off-disk backups and automatic restore tooling remain pending.
 
 ## Regression coverage
 

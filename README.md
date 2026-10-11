@@ -6,6 +6,7 @@ Training assistant with CLI and persistent web conversations, using PydanticAI a
 
 - [Data model](docs/data-model.md)
 - [Database migrations](docs/database-migrations.md)
+- [Kubernetes deployment](docs/kubernetes-deployment.md)
 - [Application components](docs/application-components.md)
 - [Frontend–backend communication](docs/frontend-backend.md)
 
@@ -55,8 +56,9 @@ Run one server process with one worker against the database. Active stream repla
 are temporary; they do not survive a server restart. CLI history remains temporary.
 Long conversations currently send their full history to the model; context summarization
 is a subsequent step. Local access uses no application login; the existing deployed ingress
-applies Basic Auth to all routes. Persistent GKE storage and backups still need configuration
-before deploying this database-backed version.
+applies Basic Auth to all routes. GKE manifests include persistent SQLite storage and checked
+pre-upgrade backups; scheduled off-disk backups remain pending. See the deployment guide
+for cluster prerequisites and rollout recovery.
 
 ## Development checks
 

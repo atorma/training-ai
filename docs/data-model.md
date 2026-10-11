@@ -73,7 +73,9 @@ stateDiagram-v2
 | Process ownership | Adjacent `.lock` file; one server process/worker per database |
 | Scope | Web conversations only; CLI history and `/summary` output are not stored here |
 
-Local restarts retain data. GKE persistent storage and backups still need configuration.
+Local restarts retain data. GKE manifests mount a persistent disk and create checked backups
+before schema upgrades. Cluster provisioning and scheduled off-disk backups remain pending;
+see [Kubernetes deployment](kubernetes-deployment.md).
 
 All schema changes and persistent data transformations use the shared, versioned migration
 runner at startup under the process ownership lock. The current schema is migration 1;
