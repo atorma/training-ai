@@ -10,10 +10,16 @@ a cluster. There is no combined root Kustomization that can delete both sets tog
 The deployment scripts apply to the current kubectl context and namespace.
 
 Build the image with `make build-docker` after `make bootstrap` and configuring
-`deployment/.env`. The script runs `make build-web` locally before Docker packages the
-generated assets; no Node build stage runs in Docker. Direct Docker builds require
+`GCLOUD_REPOSITORY` in `deployment/.env`. BuildKit and the Docker buildx CLI plugin are
+required; check `docker buildx version` when using Colima. The script runs `make build-web`
+locally before Docker packages the generated assets; no Node build stage runs in Docker.
+Direct Docker builds require
 `make build-web` first. Missing assets fail the image build; rebuilding avoids stale UI assets.
 Image push and application deployment remain separate script operations.
+Python dependencies use `uv sync --locked --no-dev` with uv 0.13.0 in the build stages.
+Dependencies install before application source is copied, and BuildKit caches uv downloads.
+The project installs without editable source links; only the Linux Python environment is
+copied into the runtime image. uv and its cache remain in the build stages.
 
 Before the first application deployment, run `sh deployment/setup-storage.sh` to apply the
 storage manifests. Storage changes, such as expanding the claim, use this separate script.

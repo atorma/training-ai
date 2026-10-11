@@ -60,58 +60,32 @@ applies Basic Auth to all routes. GKE manifests include persistent SQLite storag
 pre-upgrade backups; scheduled off-disk backups remain pending. See the deployment guide
 for cluster prerequisites and rollout recovery.
 
-## Development checks
+## Development
 
-With Make, uv, Node.js, and npm installed, install dependencies and hooks once per clone:
+Run `make bootstrap` once per clone to install locked dependencies, Git hooks, and Chromium.
+Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 
-```bash
-make bootstrap
-```
+| Command | Purpose |
+| --- | --- |
+| `make run-web` | Build the frontend and start the server with Python reload. |
+| `make build-web` | Compile frontend assets. |
+| `make build` | Build frontend assets and Python packages in `dist/`. |
+| `make build-docker` | Build frontend assets locally, then package the Docker image. |
+| `make lint` | Check Python, Markdown, frontend formatting, and TypeScript. |
+| `make lint-fix` | Apply formatting and supported lint fixes. |
+| `make hooks` | Run pre-commit hooks, including new unstaged, nonignored files. |
+| `make test` | Run fast Python tests. |
+| `make test-e2e` | Run browser tests against the real API and temporary SQLite. |
+| `make install-browser` | Reinstall Chromium if needed. |
 
-Bootstrap installs the locked Python and npm dependencies, Git hooks, and Playwright Chromium.
+- Configure `.env` before running the server. Restart `make run-web` after frontend changes.
+- If hooks or `make lint-fix` change files, review the changes and rerun the checks.
+- Browser tests use port 7933 and synthetic model responses; no live model or MCP calls.
+- Docker builds require BuildKit/buildx and `GCLOUD_REPOSITORY` in `deployment/.env`.
+  See [the deployment guide](docs/kubernetes-deployment.md) for build and caching details.
 
-The hooks use prek with `.pre-commit-config.yaml`. On each commit, Ruff applies safe lint
-fixes, sorts imports, and formats changed Python files. If a hook changes files, review and
-stage those changes before retrying the commit. Python formatting uses a 100-character line
-length and targets Python 3.12.
-
-Run checks across the repository:
-
-```bash
-make lint      # read-only Python and Markdown checks
-make lint-fix  # apply formatting and supported lint fixes
-make hooks     # pre-commit hooks, including new unstaged files
-make test      # fast pytest suite; no Playwright
-make install-browser  # reinstall Chromium separately if needed
-make test-e2e         # real app and SQLite, deterministic test model
-```
-
-Markdown files are checked with markdownlint-cli2, with automatic fixes where supported.
-Prose has a 100-character line limit; code blocks and tables are exempt. The hook uses
-an isolated Node.js 22 environment managed by prek; no global Node upgrade is needed.
-The first run downloads the hook and its dependencies. Run the configured hooks with:
-
-```bash
-make hooks
-```
-
-`make run-web` builds the frontend and starts the local server with reload. Configure `.env`
-first. After frontend changes, restart this command to rebuild; Python changes reload automatically.
-`make build-web` builds only the frontend. `make build` builds it and creates Python wheel/source
-packages in `dist/`, including static assets. Node is build tooling, not a production server.
-`make build-docker` rebuilds web assets locally and runs `deployment/build.sh` to package
-them in the Docker image. Configure `GCLOUD_REPOSITORY` in `deployment/.env` first.
-The Dockerfile consumes `src/web_assets/static`; it no longer installs npm dependencies
-or builds the frontend in a container. For a direct Docker build, run `make build-web` first.
-`make lint-fix` can exit
-with a failure status when hooks fix files; review the changes and rerun it. Markdown hooks
-check tracked files; `make hooks` also includes new, unstaged files and excludes ignored files.
-
-Keep the Ruff hook revision aligned with the Ruff development dependency when upgrading.
-Frontend hooks run ESLint, Prettier, and TypeScript checks using the locked npm dependencies.
-Browser checks run a separate local server on port 7933 with synthetic model responses and a
-temporary SQLite database; they make no live model or MCP requests.
-`make test-e2e` synchronizes the locked Python dependencies through uv before starting Playwright.
+Hooks are configured in `.pre-commit-config.yaml`: Ruff, markdownlint-cli2,
+ESLint/Prettier, and TypeScript. Keep the Ruff hook revision aligned with its Python dependency.
 
 ## Environment Variables
 

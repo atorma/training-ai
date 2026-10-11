@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 IMAGE="$GCLOUD_REPOSITORY/training-ai-server:$(get_commit_hash)"
 
 make -C .. build-web
-docker build -f ../Dockerfile -t training-ai-server -t "$IMAGE" ../
+DOCKER_BUILDKIT=1 docker build -f ../Dockerfile -t training-ai-server -t "$IMAGE" ../
 
 if [ -f .env ]; then
   tmp_file=$(mktemp)
