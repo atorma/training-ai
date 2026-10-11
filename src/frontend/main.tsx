@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   AssistantRuntimeProvider,
@@ -14,6 +20,7 @@ import {
   type ToolCallMessagePart,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, ApiError, type Detail, type Thread } from "./api";
 import { readRun } from "./stream";
 import "./style.css";
@@ -89,13 +96,35 @@ const ToolResult: ToolCallMessagePartComponent = ({
   </details>
 );
 
+function MarkdownTable({ children }: ComponentPropsWithoutRef<"table">) {
+  return (
+    <div
+      className="markdown-table"
+      tabIndex={0}
+      role="region"
+      aria-label="Message table"
+    >
+      <table>{children}</table>
+    </div>
+  );
+}
+
+function MarkdownText() {
+  return (
+    <MarkdownTextPrimitive
+      remarkPlugins={[remarkGfm]}
+      components={{ table: MarkdownTable }}
+    />
+  );
+}
+
 function Message() {
   return (
     <MessagePrimitive.Root className="message">
       <MessagePrimitive.Parts
         components={{
-          Text: () => <MarkdownTextPrimitive />,
-          Reasoning: () => <MarkdownTextPrimitive />,
+          Text: MarkdownText,
+          Reasoning: MarkdownText,
           tools: { Fallback: ToolResult },
         }}
       />

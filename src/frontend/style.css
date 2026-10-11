@@ -154,6 +154,29 @@ h2 {
 .message pre {
   overflow-x: auto;
 }
+.markdown-table {
+  overflow-x: auto;
+  margin: 16px 0;
+}
+.markdown-table table {
+  width: 100%;
+  min-width: 32rem;
+  border-collapse: collapse;
+  line-height: 1.5;
+}
+.markdown-table th,
+.markdown-table td {
+  border: 1px solid #c8d6ce;
+  padding: 10px 12px;
+  vertical-align: top;
+}
+.markdown-table th {
+  background: #edf4ef;
+  text-align: left;
+}
+.markdown-table tbody tr:nth-child(even) {
+  background: #f7faf8;
+}
 .message-timestamp {
   display: block;
   margin-top: 8px;

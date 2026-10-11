@@ -9,6 +9,81 @@ function userPrompts(detail: Detail) {
   );
 }
 
+test("Markdown tables render in chat and stay within narrow screens", async ({
+  page,
+}) => {
+  const markdown = `## Suggested weekly plan
+
+| Day | Workout | Purpose |
+|---|---|---|
+| **Mon Oct 12** | Easy bike commutes **2 × 25 min** + moderate strength training **45–50 min** | Build aerobic fitness and maintain strength. Keep the effort comfortable throughout both sessions. |
+| **Tue Oct 13** | Swimming **50 min** | Focus on technique and easy aerobic swimming. Include relaxed drills with plenty of recovery between sets. |
+| **Wed Oct 14** | Easy run **20 min** + easy cycling **40–45 min**, preferably in separate sessions | Add variety to the week while keeping both sessions at a conversational pace. |
+
+**Weekly total approximately 8 h 25 min–9 h**.
+
+| Workout | Minutes |
+|:---|---:|
+| Swimming | 50 |`;
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message" }).fill(markdown);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const assistant = page.locator(".message").nth(1);
+  await expect(assistant.getByRole("table")).toHaveCount(2);
+  await expect(page.locator(".message time")).toHaveCount(2);
+
+  // The real test model echoes the prompt; verify both message roles and persistence.
+  await page.reload();
+  for (const index of [0, 1]) {
+    const message = page.locator(".message").nth(index);
+    const table = message.getByRole("table").first();
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Day",
+      "Workout",
+      "Purpose",
+    ]);
+    await expect(table.getByRole("row")).toHaveCount(4);
+    await expect(table.locator("strong").first()).toHaveText("Mon Oct 12");
+    await expect(table.getByRole("cell").nth(1)).toContainText("2 × 25 min");
+    await expect(
+      message.getByRole("table").last().getByRole("cell").last(),
+    ).toHaveCSS("text-align", "right");
+    await expect(
+      message.getByText("Weekly total approximately 8 h 25 min–9 h", {
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
+
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const region = assistant
+      .getByRole("region", { name: "Message table" })
+      .first();
+    const dimensions = await region.evaluate((element) => ({
+      client: element.clientWidth,
+      scroll: element.scrollWidth,
+      transcriptClient: element.closest(".transcript")!.clientWidth,
+      transcriptScroll: element.closest(".transcript")!.scrollWidth,
+      pageClient: document.documentElement.clientWidth,
+      pageScroll: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.transcriptScroll).toBeLessThanOrEqual(
+      dimensions.transcriptClient,
+    );
+    expect(dimensions.pageScroll).toBeLessThanOrEqual(dimensions.pageClient);
+    if (width < 650) {
+      expect(dimensions.scroll).toBeGreaterThan(dimensions.client);
+      await region.evaluate((element) => {
+        element.scrollLeft = 100;
+      });
+      expect(
+        await region.evaluate((element) => element.scrollLeft),
+      ).toBeGreaterThan(0);
+    }
+  }
+});
+
 for (const submission of ["Enter", "Send button"] as const) {
   test(`composer keeps focus after submitting with ${submission}`, async ({
     page,
