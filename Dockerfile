@@ -1,12 +1,3 @@
-FROM node:22-slim AS frontend
-
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY tsconfig.json vite.config.ts playwright.config.ts index.html ./
-COPY src/frontend ./src/frontend
-RUN npm run build
-
 FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,9 +7,11 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
-COPY --from=frontend /app/src/web_assets/static ./src/web_assets/static
+# Built locally by make build-web before invoking Docker.
+COPY src/web_assets/static ./src/web_assets/static
 
-RUN pip wheel --no-cache-dir --wheel-dir /wheels .
+RUN test -s src/web_assets/static/index.html \
+    && pip wheel --no-cache-dir --wheel-dir /wheels .
 
 FROM python:3.12-slim
 

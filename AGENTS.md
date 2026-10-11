@@ -28,6 +28,7 @@ Use Make targets for development tasks.
 - `make render-k8s-storage` - render storage manifests locally without accessing a cluster.
 - `make build` - create Python packages in `dist/`; optional for local development.
 - `make build-web` - compile the React frontend into Python's static assets.
+- `make build-docker` - build web assets locally, then build the Docker image.
 - `make run-web` - start the local web server and current UI on port 7932 with reload.
 - `make run-cli` - start the interactive CLI agent.
 - `make test` - run fast pytest tests; browser/Playwright tests are separate.

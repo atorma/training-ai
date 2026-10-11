@@ -9,6 +9,12 @@ Render them locally with `make render-k8s` and `make render-k8s-storage`; neithe
 a cluster. There is no combined root Kustomization that can delete both sets together.
 The deployment scripts apply to the current kubectl context and namespace.
 
+Build the image with `make build-docker` after `make bootstrap` and configuring
+`deployment/.env`. The script runs `make build-web` locally before Docker packages the
+generated assets; no Node build stage runs in Docker. Direct Docker builds require
+`make build-web` first. Missing assets fail the image build; rebuilding avoids stale UI assets.
+Image push and application deployment remain separate script operations.
+
 Before the first application deployment, run `sh deployment/setup-storage.sh` to apply the
 storage manifests. Storage changes, such as expanding the claim, use this separate script.
 Routine `deployment/deploy.sh` and `deployment/delete.sh` operate only on application manifests.

@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web run-web run-cli test test-e2e install-browser render-k8s render-k8s-storage
+.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web run-cli test test-e2e install-browser render-k8s render-k8s-storage
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -29,6 +29,9 @@ build: build-web
 
 build-web:
 	$(NPM) run build
+
+build-docker:
+	sh deployment/build.sh
 
 run-web: build-web
 	$(UV) run --locked uvicorn web:app --host 0.0.0.0 --port 7932 --reload --timeout-graceful-shutdown 5

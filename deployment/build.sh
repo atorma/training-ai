@@ -2,11 +2,12 @@
 set -e
 cd "$(dirname "$0")"
 
-. utils.sh
-. .env
+. ./utils.sh
+. ./.env
 
 IMAGE="$GCLOUD_REPOSITORY/training-ai-server:$(get_commit_hash)"
 
+make -C .. build-web
 docker build -f ../Dockerfile -t training-ai-server -t "$IMAGE" ../
 
 if [ -f .env ]; then

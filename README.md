@@ -99,6 +99,10 @@ make hooks
 first. After frontend changes, restart this command to rebuild; Python changes reload automatically.
 `make build-web` builds only the frontend. `make build` builds it and creates Python wheel/source
 packages in `dist/`, including static assets. Node is build tooling, not a production server.
+`make build-docker` rebuilds web assets locally and runs `deployment/build.sh` to package
+them in the Docker image. Configure `GCLOUD_REPOSITORY` in `deployment/.env` first.
+The Dockerfile consumes `src/web_assets/static`; it no longer installs npm dependencies
+or builds the frontend in a container. For a direct Docker build, run `make build-web` first.
 `make lint-fix` can exit
 with a failure status when hooks fix files; review the changes and rerun it. Markdown hooks
 check tracked files; `make hooks` also includes new, unstaged files and excludes ignored files.
