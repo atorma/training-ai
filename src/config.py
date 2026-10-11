@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -17,6 +18,7 @@ class Config:
     signal_number: str | None
     signal_basic_auth_username: str | None
     signal_basic_auth_password: str | None
+    timezone: str = "UTC"
 
     def mcp_headers(self) -> dict[str, str] | None:
         return _basic_auth_header(self.mcp_basic_auth_username, self.mcp_basic_auth_password)
@@ -47,6 +49,12 @@ def load_config() -> Config:
         missing_list = ", ".join(missing)
         raise RuntimeError(f"Missing required environment variables: {missing_list}")
 
+    timezone = os.getenv("TIMEZONE", "UTC").strip()
+    try:
+        ZoneInfo(timezone)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise RuntimeError("TIMEZONE must be a valid IANA timezone") from exc
+
     return Config(
         model=model,
         mcp_server_url=mcp_server_url,
@@ -56,4 +64,5 @@ def load_config() -> Config:
         signal_number=os.getenv("SIGNAL_NUMBER", "").strip() or None,
         signal_basic_auth_username=os.getenv("SIGNAL_BASIC_AUTH_USERNAME", "").strip() or None,
         signal_basic_auth_password=os.getenv("SIGNAL_BASIC_AUTH_PASSWORD", "").strip() or None,
+        timezone=timezone,
     )

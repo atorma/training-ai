@@ -89,6 +89,8 @@ spec:
           env:
             - name: DATABASE_PATH
               value: /app/data/conversations.sqlite3
+            - name: TIMEZONE
+              value: Europe/Helsinki
             - name: MODEL
               value: openai:gpt-6.1-sol
             - name: MCP_SERVER_URL

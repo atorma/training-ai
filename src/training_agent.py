@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
@@ -21,4 +23,24 @@ def create_agent(config: Config) -> Agent:
         headers=config.mcp_headers(),
     )
     base_instructions = os.getenv("BASE_INSTRUCTIONS", BASE_INSTRUCTIONS)
-    return Agent(config.model, instructions=base_instructions, toolsets=[mcp_server])
+    timezone = ZoneInfo(config.timezone)
+    agent = Agent(config.model, instructions=base_instructions, toolsets=[mcp_server])
+
+    @agent.instructions
+    def current_time_instructions() -> str:
+        now = datetime.now(timezone)
+        today = now.date()
+        yesterday = today - timedelta(days=1)
+        tomorrow = today + timedelta(days=1)
+        return (
+            f"Current server date and time: {now.isoformat(timespec='seconds')}. "
+            f"User timezone: {timezone.key}. "
+            f"Today is {today.isoformat()} ({now.strftime('%A')}); "
+            f"yesterday is {yesterday.isoformat()}; tomorrow is {tomorrow.isoformat()}. "
+            "Use this clock context to answer date/time questions and resolve relative dates "
+            "in the current request, including dates passed to training-data tools. "
+            "Do not infer the current date from model knowledge or earlier conversation turns. "
+            "Keep dates referring to historical events anchored to their original context."
+        )
+
+    return agent

@@ -41,6 +41,14 @@ flowchart TD
 
 ## Build and serving
 
+The training agent adds fresh server date/time instructions to every model request, including
+continued conversations and retries. `TIMEZONE` selects the user's IANA timezone (default
+`UTC`), independent of the container's timezone.
+The context includes the UTC offset,
+weekday, and explicit dates for today, yesterday, and tomorrow. It is added alongside any
+`BASE_INSTRUCTIONS` override. Invalid timezone configuration fails at startup. Summary requests
+continue to use their own explicit `timezone` and date ranges.
+
 ```mermaid
 flowchart LR
     Source[src/frontend] -->|Vite / Node| Assets[src/web_assets/static]
