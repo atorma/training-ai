@@ -9,6 +9,33 @@ function userPrompts(detail: Detail) {
   );
 }
 
+for (const submission of ["Enter", "Send button"] as const) {
+  test(`composer keeps focus after submitting with ${submission}`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const composer = page.getByRole("textbox", { name: "Message" });
+    const send = page.getByRole("button", { name: "Send", exact: true });
+    for (const prompt of ["First focus question", "Another focus question"]) {
+      await composer.fill(prompt);
+      if (submission === "Enter") await composer.press("Enter");
+      else await send.click();
+      await expect(
+        page.getByText("Generating response… You can return later."),
+      ).toBeVisible();
+      await expect(composer).toBeFocused();
+      await expect(composer).toHaveValue("");
+      await page.keyboard.type("Draft for the next message");
+      await expect(composer).toHaveValue("Draft for the next message");
+      await expect(send).toBeDisabled();
+      await expect(page.locator(".message").last()).toContainText(prompt);
+      await expect(send).toBeEnabled();
+      await expect(composer).toBeFocused();
+      await expect(composer).toHaveValue("Draft for the next message");
+    }
+  });
+}
+
 test("saved message timestamps persist across browsers and use each browser's time zone", async ({
   browser,
   baseURL,

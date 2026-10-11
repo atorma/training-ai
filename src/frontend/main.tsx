@@ -529,6 +529,7 @@ function App() {
             </ThreadPrimitive.Viewport>
             <ComposerPrimitive.Root className="composer">
               <ComposerPrimitive.Input
+                autoFocus
                 aria-label="Message"
                 placeholder="Ask about your training…"
               />
