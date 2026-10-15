@@ -1,5 +1,6 @@
 import shutil
 import sqlite3
+from pathlib import Path
 
 import pytest
 from pydantic_ai import Agent
@@ -20,6 +21,16 @@ def populated_store(tmp_path):
     return store, thread["id"]
 
 
+def legacy_store(tmp_path):
+    path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.executescript(Path(__file__).with_name("fixtures").joinpath("schema-v1.sql").read_text())
+        db.execute(
+            "INSERT INTO threads VALUES ('legacy-thread', 'Before deployment', 'created', 'updated')"
+        )
+    return ConversationStore(path), "legacy-thread"
+
+
 def test_first_deployment_and_current_schema_need_no_backup(tmp_path):
     path = tmp_path / "chat.sqlite3"
     directory = tmp_path / "backups"
@@ -31,14 +42,15 @@ def test_first_deployment_and_current_schema_need_no_backup(tmp_path):
 
 
 def test_upgrade_backup_includes_wal_and_restores_through_api(tmp_path):
-    store, thread_id = populated_store(tmp_path)
+    store, thread_id = legacy_store(tmp_path)
     # Keep committed changes in WAL while taking the backup.
     with store.connection() as db:
+        db.execute("PRAGMA journal_mode = WAL")
         db.execute("PRAGMA wal_autocheckpoint = 0")
         db.execute("UPDATE threads SET title = 'Committed in WAL' WHERE id = ?", (thread_id,))
         db.commit()
         assert store.path.with_suffix(".sqlite3-wal").exists()
-        backup = backup_before_upgrade(store.path, tmp_path / "backups", target_version=2)
+        backup = backup_before_upgrade(store.path, tmp_path / "backups")
     assert backup is not None
     before = store.get_thread(thread_id)
     store.rename_thread(thread_id, "After backup")
@@ -53,7 +65,7 @@ def test_upgrade_backup_includes_wal_and_restores_through_api(tmp_path):
 
 @pytest.mark.parametrize("version", [-1, 99])
 def test_unsupported_schema_blocks_backup(tmp_path, version):
-    store, _ = populated_store(tmp_path)
+    store, _ = legacy_store(tmp_path)
     with store.connection() as db:
         db.execute(f"PRAGMA user_version = {version}")
     with pytest.raises(RuntimeError, match="Unsupported database schema version"):
@@ -62,31 +74,31 @@ def test_unsupported_schema_blocks_backup(tmp_path, version):
 
 
 def test_backup_refuses_a_database_owned_by_running_server(tmp_path):
-    store, _ = populated_store(tmp_path)
+    store, _ = legacy_store(tmp_path)
     with store.exclusive_session():
         with pytest.raises(RuntimeError, match="one server worker"):
-            backup_before_upgrade(store.path, tmp_path / "backups", target_version=2)
+            backup_before_upgrade(store.path, tmp_path / "backups")
     assert not (tmp_path / "backups").exists()
 
 
 def test_backup_write_failure_preserves_database(tmp_path):
-    store, thread_id = populated_store(tmp_path)
+    store, thread_id = legacy_store(tmp_path)
     before = store.get_thread(thread_id)
     invalid_directory = tmp_path / "file"
     invalid_directory.write_text("Cannot be a backup directory")
     with pytest.raises(FileExistsError):
-        backup_before_upgrade(store.path, invalid_directory, target_version=2)
+        backup_before_upgrade(store.path, invalid_directory)
     assert store.get_thread(thread_id) == before
 
 
 def test_invalid_backup_is_removed_and_source_is_preserved(tmp_path):
-    store, thread_id = populated_store(tmp_path)
+    store, thread_id = legacy_store(tmp_path)
     # Deliberately introduce an orphan using a raw connection with foreign keys disabled.
     with sqlite3.connect(store.path) as db:
         db.execute("INSERT INTO messages VALUES ('missing-thread', 1, '{}')")
     before = store.get_thread(thread_id)
     directory = tmp_path / "backups"
     with pytest.raises(RuntimeError, match="foreign key check"):
-        backup_before_upgrade(store.path, directory, target_version=2)
+        backup_before_upgrade(store.path, directory)
     assert list(directory.iterdir()) == []
     assert store.get_thread(thread_id) == before

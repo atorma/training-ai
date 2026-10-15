@@ -16,7 +16,7 @@ interrupted runs or accepting requests. A migration failure prevents startup.
 at 1, is its schema version. SQLite's `PRAGMA user_version` records the last applied version.
 
 - Empty databases start at version 0 and run every migration in order.
-- Existing version-1 databases keep their schema and data without rerunning migration 1.
+- Databases at an earlier supported version run each pending migration in order.
 - Each pending migration runs inside `BEGIN IMMEDIATE`. Schema changes, data changes, and
   the version update commit together. Failure rolls back that migration; earlier committed
   migrations remain applied. The next startup resumes from the last committed version.
@@ -59,8 +59,12 @@ break writes.
 SQLite changes that cannot use a direct `ALTER TABLE` need a table rebuild: create the
 replacement, copy/transform data, replace the original, and recreate indexes and triggers.
 Follow [SQLite's documented procedure](https://www.sqlite.org/lang_altertable.html#otheralter),
-including foreign-key handling and checks. Disabling foreign keys must happen before the
-migration transaction; changes requiring that need deliberate runner support and tests.
+including foreign-key handling and checks. If a rebuild requires foreign-key enforcement to be
+suspended, declare that requirement on the migration. The runner disables enforcement before
+`BEGIN IMMEDIATE`, validates references with `foreign_key_check` before commit, and restores the
+connection's original setting after success or failure. Migration code must verify the expected
+source schema, preserve data and rowids where they affect behavior, and recreate required indexes
+and dependent objects. Abort safely when the source schema contains unsupported changes.
 
 ## Deployment and recovery
 
@@ -82,8 +86,7 @@ scheduled off-disk backups and automatic restore tooling remain pending.
 
 ## Regression coverage
 
-[Migration tests](../tests/test_database_migrations.py) cover fresh/repeated initialization,
-legacy version-1 API startup, ordered upgrades, writes after adding columns, failed-migration
-rollback and retry, unsupported versions, and caller transaction protection.
-[The frozen version-1 fixture](../tests/fixtures/schema-v1.sql) represents the original schema
-independently of the migration registry; keep it unchanged when adding migrations.
+[Migration tests](../tests/test_database_migrations.py) should cover fresh/repeated
+initialization, upgrades with existing data, relevant constraints, failed-migration rollback,
+unsupported versions, and caller transaction protection. Keep frozen schema fixtures independent
+of the migration registry and unchanged after their versions have been applied.

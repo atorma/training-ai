@@ -38,7 +38,9 @@ erDiagram
 | Message key | `(thread_id, sequence)`; sequence starts at 1 within each thread. |
 | Message payload | Original requests/responses, including text, tool calls/results and timestamps. |
 | Run prompt | `user_sequence` identifies the saved prompt in the same thread; no declared foreign key. |
-| Active run | Partial unique index permits one `running` run per thread. |
+| Active run | Partial unique index `one_active_run` permits one `running` run per thread. |
+| Constraint names | Primary keys, foreign keys, checks and not-null rules use stable `pk_`, `fk_`, `ck_` and `nn_` names. |
+| Child FK indexes | The message primary key covers `messages.thread_id`; `runs_by_thread` covers all run states. |
 | Deletion | Foreign keys cascade messages and runs; deleting a running thread is rejected. |
 | Initial title | `New conversation`, replaced by the first prompt's first 80 normalized characters. |
 | Ordering | Threads by latest `updated_at`; messages by `sequence`. |
@@ -69,7 +71,7 @@ stateDiagram-v2
 | Setting | Current implementation |
 | --- | --- |
 | File | `DATABASE_PATH`, default `data/conversations.sqlite3` |
-| SQLite | WAL mode, foreign keys enabled, schema `user_version = 1` |
+| SQLite | WAL mode, foreign keys enabled, schema `user_version = 2` |
 | Process ownership | Adjacent `.lock` file; one server process/worker per database |
 | Scope | Web conversations only; CLI history and `/summary` output are not stored here |
 
@@ -78,6 +80,7 @@ before schema upgrades. Cluster provisioning and scheduled off-disk backups rema
 see [Kubernetes deployment](kubernetes-deployment.md).
 
 All schema changes and persistent data transformations use the shared, versioned migration
-runner at startup under the process ownership lock. The current schema is migration 1;
-existing version-1 databases are preserved. See [database migrations](database-migrations.md)
-for the required workflow, transaction rules, tests, and deployment recovery.
+runner at startup under the process ownership lock. Migration 2 names existing conversation
+constraints while preserving saved values, payload text and row ordering. See [database
+migrations](database-migrations.md) for the required workflow, transaction rules, tests, and
+deployment recovery.
