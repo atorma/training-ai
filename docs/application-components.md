@@ -16,6 +16,11 @@ flowchart TD
     Events --> Chat
     Training --> Provider[Model provider]
     Training --> MCP[External MCP server]
+    Training --> Memory[Memory tools / per-run context]
+    Web --> MemoryAPI[Memory management endpoints]
+    MemoryAPI --> MemoryStore[MemoryStore]
+    Memory --> MemoryStore
+    MemoryStore --> DB
     Web --> Summary[POST /summary]
     Summary --> SummaryAgent[Summary agent / PydanticAI]
     SummaryAgent --> Provider
@@ -33,6 +38,10 @@ flowchart TD
 | Upgrade backup | Checked SQLite backup under the ownership lock before Kubernetes upgrades | [database_backup.py](../src/database_backup.py) |
 | Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/conversation_events.py) |
 | Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_agent.py) |
+| Shared memory | Validated observations/goals/constraints, versioned commands, source links and receipts | [memory_models.py](../src/memory_models.py), [memory_store.py](../src/memory_store.py) |
+| Memory agent integration | Per-run dependencies, sequential memory tools and fixed turn instructions | [memory_tools.py](../src/memory_tools.py) |
+| Memory context | Atomic turn selection, independent budgets and current reference resolution | [memory_context.py](../src/memory_context.py) |
+| Memory management | HTTP inspection/edit/forget commands and responsive browser view | [memory_api.py](../src/memory_api.py), [memory.tsx](../src/frontend/memory.tsx) |
 | Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
@@ -66,3 +75,4 @@ flowchart LR
 
 See [data model](data-model.md) and [frontend communication](frontend-backend.md).
 See [Kubernetes deployment](kubernetes-deployment.md) for storage, backups, and rollout recovery.
+See [shared training memory](shared-training-memory.md) for cross-thread context and evaluation.

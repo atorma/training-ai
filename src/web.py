@@ -25,7 +25,15 @@ def create_app() -> Starlette:
     agent = create_agent(config)
     summary_agent = create_summary_agent(config)
     signal_sender = build_signal_sender(config)
-    app = create_conversation_app(agent, os.getenv("DATABASE_PATH", "data/conversations.sqlite3"))
+    app = create_conversation_app(
+        agent,
+        os.getenv("DATABASE_PATH", "data/conversations.sqlite3"),
+        config.timezone,
+        config.memory_observation_days,
+        config.memory_context_budget,
+        config.memory_observation_budget,
+        config.conversation_history_budget,
+    )
     app.add_route(
         "/summary",
         create_summary_handler(summary_agent, signal_sender),

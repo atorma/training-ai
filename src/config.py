@@ -19,6 +19,10 @@ class Config:
     signal_basic_auth_username: str | None
     signal_basic_auth_password: str | None
     timezone: str = "UTC"
+    memory_observation_days: int = 30
+    memory_context_budget: int = 12000
+    memory_observation_budget: int = 4000
+    conversation_history_budget: int = 64000
 
     def mcp_headers(self) -> dict[str, str] | None:
         return _basic_auth_header(self.mcp_basic_auth_username, self.mcp_basic_auth_password)
@@ -55,6 +59,22 @@ def load_config() -> Config:
     except (ValueError, ZoneInfoNotFoundError) as exc:
         raise RuntimeError("TIMEZONE must be a valid IANA timezone") from exc
 
+    try:
+        observation_days = int(os.getenv("MEMORY_OBSERVATION_DAYS", "30"))
+        context_budget = int(os.getenv("MEMORY_CONTEXT_BUDGET", "12000"))
+        observation_budget = int(os.getenv("MEMORY_OBSERVATION_BUDGET", "4000"))
+        history_budget = int(os.getenv("CONVERSATION_HISTORY_BUDGET", "64000"))
+        if not 1 <= observation_days <= 3650 or any(
+            not 2000 <= value <= 1000000
+            for value in (context_budget, observation_budget, history_budget)
+        ):
+            raise ValueError
+    except ValueError as exc:
+        raise RuntimeError(
+            "Invalid MEMORY_OBSERVATION_DAYS (1–3650) or context budget (2000–1000000): "
+            "MEMORY_CONTEXT_BUDGET, MEMORY_OBSERVATION_BUDGET, CONVERSATION_HISTORY_BUDGET"
+        ) from exc
+
     return Config(
         model=model,
         mcp_server_url=mcp_server_url,
@@ -65,4 +85,8 @@ def load_config() -> Config:
         signal_basic_auth_username=os.getenv("SIGNAL_BASIC_AUTH_USERNAME", "").strip() or None,
         signal_basic_auth_password=os.getenv("SIGNAL_BASIC_AUTH_PASSWORD", "").strip() or None,
         timezone=timezone,
+        memory_observation_days=observation_days,
+        memory_context_budget=context_budget,
+        memory_observation_budget=observation_budget,
+        conversation_history_budget=history_budget,
     )

@@ -90,3 +90,13 @@ scheduled off-disk backups and automatic restore tooling remain pending.
 initialization, upgrades with existing data, relevant constraints, failed-migration rollback,
 unsupported versions, and caller transaction protection. Keep frozen schema fixtures independent
 of the migration registry and unchanged after their versions have been applied.
+
+## Relational memory
+
+Production conversation migrations 1 and 2 remain unchanged. Migration 3 creates the four STRICT
+relational memory tables and current-record view. Future deployed migrations must preserve all
+revision columns, revision topics, source relationships, tombstones and receipts.
+Changing Pydantic validation never migrates stored rows. Preserve original message JSON and run
+frozen adapter/history/rendering fixtures before upgrading PydanticAI.
+
+Startup never silently discards memory or resets a schema version.

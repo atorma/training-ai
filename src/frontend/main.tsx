@@ -21,8 +21,15 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, ApiError, type Detail, type Thread } from "./api";
+import {
+  api,
+  ApiError,
+  type Detail,
+  type MemoryReceipt,
+  type Thread,
+} from "./api";
 import { readRun } from "./stream";
+import { MemoryView } from "./memory";
 import "./style.css";
 
 function messages(detail: Detail | null): ThreadMessageLike[] {
@@ -30,8 +37,18 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
   const results = new Map(
     detail.messages.flatMap((m) =>
       m.payload.parts
-        .filter((p) => p.part_kind === "tool-return")
-        .map((p) => [p.tool_call_id, p.content] as const),
+        .filter(
+          (p) =>
+            p.part_kind === "tool-return" ||
+            (p.part_kind === "retry-prompt" && p.tool_call_id),
+        )
+        .map(
+          (p) =>
+            [
+              p.tool_call_id,
+              p.part_kind === "retry-prompt" ? { error: p.content } : p.content,
+            ] as const,
+        ),
     ),
   );
   return detail.messages.flatMap((m): ThreadMessageLike[] => {
@@ -190,6 +207,19 @@ function ConversationList({
   );
 }
 
+const RECEIPT_NOTICE_MS = 5000;
+
+function receiptKey(receipt: MemoryReceipt) {
+  // Status is derived on read, so a later forget or correction notifies again.
+  return [
+    receipt.sequence,
+    receipt.action,
+    receipt.entry_id,
+    receipt.applied_revision,
+    receipt.status,
+  ].join(":");
+}
+
 function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selected, setSelected] = useState<string | null>(() =>
@@ -209,7 +239,51 @@ function App() {
   const selectedRef = useRef(selected);
   const navigationDialog = useRef<HTMLDialogElement>(null);
   const actionsPopover = useRef<HTMLDivElement>(null);
+  const memoryDialog = useRef<HTMLDialogElement>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryEntry, setMemoryEntry] = useState<string | null>(null);
+  const [receiptNotices, setReceiptNotices] = useState<
+    { key: string; receipt: MemoryReceipt }[]
+  >([]);
+  const seenReceipts = useRef<{ threadId: string | null; keys: Set<string> }>({
+    threadId: null,
+    keys: new Set(),
+  });
   selectedRef.current = selected;
+
+  useEffect(() => {
+    if (!detail) return;
+    const receipts = detail.memory_receipts ?? [];
+    const seen = seenReceipts.current;
+    if (seen.threadId !== detail.id) {
+      // Opening a thread notifies only about its latest turn, not older history.
+      seen.threadId = detail.id;
+      seen.keys = new Set(
+        receipts
+          .filter((r) => r.sequence !== detail.run?.user_sequence)
+          .map(receiptKey),
+      );
+      setReceiptNotices([]);
+    }
+    const fresh = receipts
+      .map((receipt) => ({ key: receiptKey(receipt), receipt }))
+      .filter(({ key }) => !seen.keys.has(key));
+    if (!fresh.length) return;
+    fresh.forEach(({ key }) => seen.keys.add(key));
+    setReceiptNotices((notices) => [...notices, ...fresh]);
+    const keys = new Set(fresh.map(({ key }) => key));
+    setTimeout(
+      () =>
+        setReceiptNotices((notices) => notices.filter((n) => !keys.has(n.key))),
+      RECEIPT_NOTICE_MS,
+    );
+  }, [detail]);
+
+  function openMemory(id: string | null = null) {
+    setMemoryEntry(id);
+    setMemoryOpen(true);
+    memoryDialog.current?.showModal();
+  }
 
   const select = useCallback((id: string | null) => {
     navigationDialog.current?.close();
@@ -220,6 +294,7 @@ function App() {
     selectedRef.current = id;
     setSelected(id);
     setDetail(null);
+    setReceiptNotices([]);
     setError("");
     history.replaceState(
       null,
@@ -410,7 +485,11 @@ function App() {
         disabled={busy || running}
         onClick={() => {
           actionsPopover.current?.hidePopover();
-          if (confirm("Delete this conversation and all its messages?"))
+          if (
+            confirm(
+              "Delete this conversation and all its messages? Shared memory remains. Its source links become unavailable and retry receipts are removed; inspect or forget shared entries in Memory.",
+            )
+          )
             void action(async () => {
               await api(`/${detail.id}`, "DELETE");
               select(null);
@@ -499,6 +578,7 @@ function App() {
             <h2 title={detail?.title ?? "New conversation"}>
               {detail?.title ?? "New conversation"}
             </h2>
+            <button onClick={() => openMemory()}>Memory</button>
             {detail && (
               <>
                 <div className="thread-actions">{threadActions}</div>
@@ -526,10 +606,38 @@ function App() {
             </p>
           )}
           {reconnecting && <p role="status">Reconnecting to server…</p>}
+          <div className="memory-receipts-anchor">
+            <div
+              className="memory-receipts"
+              role="status"
+              aria-label="Memory updates"
+            >
+              {receiptNotices.map(({ key, receipt }) => (
+                <p key={key}>
+                  {receipt.status === "forgotten" ||
+                  receipt.action === "forget" ? (
+                    "Memory forgotten"
+                  ) : (
+                    <button onClick={() => openMemory(receipt.entry_id)}>
+                      {receipt.action === "record"
+                        ? "Remembered"
+                        : receipt.entry?.status === "ended"
+                          ? "Ended"
+                          : "Updated"}
+                      : {receipt.entry?.statement}
+                    </button>
+                  )}
+                  {receipt.status === "superseded" &&
+                    " · Superseded; showing current revision"}
+                </p>
+              ))}
+            </div>
+          </div>
           {(detail?.run?.status === "failed" ||
             detail?.run?.status === "interrupted") && (
             <div role="status" className="run-status">
               Response {detail.run.status}. Your messages are saved.
+              {detail.context_error && <p>{detail.context_error}</p>}
               <button
                 disabled={busy}
                 onClick={() =>
@@ -566,6 +674,24 @@ function App() {
             </ComposerPrimitive.Root>
           </ThreadPrimitive.Root>
         </main>
+        <dialog
+          ref={memoryDialog}
+          className="memory-dialog"
+          aria-label="Memory"
+          onClose={() => setMemoryOpen(false)}
+        >
+          {memoryOpen && (
+            <MemoryView
+              key={memoryEntry}
+              entryId={memoryEntry}
+              onClose={() => memoryDialog.current?.close()}
+              onSource={(id) => {
+                memoryDialog.current?.close();
+                select(id);
+              }}
+            />
+          )}
+        </dialog>
       </div>
     </AssistantRuntimeProvider>
   );

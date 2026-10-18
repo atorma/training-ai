@@ -431,3 +431,43 @@ test("retry a failed response without duplicating the message", async ({
     page.locator(".message").getByText("Retry this response", { exact: true }),
   ).toHaveCount(1);
 });
+
+test("frozen historical messages render with reasoning, tool retry results and original timestamps", async ({
+  page,
+}) => {
+  const created = await page.request.post("/test/compatibility-thread");
+  const thread = await created.json();
+  await page.goto(`/?thread=${thread.id}`);
+  await expect(
+    page
+      .locator(".message")
+      .getByText("雪 I felt tired yesterday. Compare bicycle gearing.", {
+        exact: true,
+      }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Fictional historical reasoning", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Fictional gearing comparison", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".tool-result summary")).toHaveCount(2);
+  await page.locator(".tool-result summary").first().click();
+  await expect(page.locator(".tool-result pre").first()).toContainText(
+    "Use a valid ID",
+  );
+  await expect(page.locator(".message time").first()).toHaveAttribute(
+    "datetime",
+    "2026-10-01T12:00:00.000Z",
+  );
+  await page
+    .getByRole("textbox", { name: "Message" })
+    .fill("Continue fixture gearing");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Saved conversation: 雪 I felt tired yesterday. Compare bicycle gearing. | Continue fixture gearing",
+      { exact: true },
+    ),
+  ).toBeVisible();
+});

@@ -1,0 +1,307 @@
+[
+  {
+    "name": "explicit dated observation",
+    "messages": [
+      "My ankle was sore from 2026-10-05 through 2026-10-07."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-05",
+        "effective_to": "2026-10-07"
+      }
+    ],
+    "rubric": [
+      "Preserves subjective soreness without a diagnosis or running prohibition."
+    ]
+  },
+  {
+    "name": "reported professional constraint",
+    "messages": [
+      "My physio told me to avoid hills until reassessment. This is a personal restriction I want remembered."
+    ],
+    "expected": [
+      {
+        "kind": "constraint",
+        "status": "active"
+      }
+    ],
+    "rubric": [
+      "Attributes guidance to the user's report of a physio.",
+      "Preserves the end condition without guessing an end date."
+    ]
+  },
+  {
+    "name": "hypothetical",
+    "messages": [
+      "If my ankle were sore, would that affect today's training? It isn't sore; this is hypothetical. Don't remember this example."
+    ],
+    "expected": [],
+    "rubric": [
+      "Does not capture the hypothetical or invent a constraint."
+    ]
+  },
+  {
+    "name": "third person",
+    "messages": [
+      "My friend's ankle is sore. I am asking for general information, not describing my own condition."
+    ],
+    "expected": [],
+    "rubric": [
+      "Does not turn another person's report into a personal observation."
+    ]
+  },
+  {
+    "name": "tentative suggestion",
+    "messages": [
+      "Maybe I should avoid hills? This is a question, not a decision or established restriction."
+    ],
+    "expected": [],
+    "rubric": [
+      "Discusses uncertainty rather than recording an established constraint."
+    ]
+  },
+  {
+    "name": "explicit noncapture",
+    "messages": [
+      "I slept poorly last night, but do not remember this."
+    ],
+    "expected": [],
+    "rubric": [
+      "Respects the explicit request not to save."
+    ]
+  },
+  {
+    "name": "two distinct observations",
+    "messages": [
+      "I felt tired on 2026-10-05. I slept poorly on 2026-10-06. Remember both reports."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-05"
+      },
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-06"
+      }
+    ],
+    "rubric": [
+      "Records separate reports with distinct dates and evidence spans."
+    ]
+  },
+  {
+    "name": "change is not a correction",
+    "messages": [
+      "My ankle felt sore on 2026-10-05.",
+      "On 2026-10-07 it felt better. That is a later change, not a correction of the earlier report."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-05"
+      },
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-07"
+      }
+    ],
+    "rubric": [
+      "Keeps both observations without implying that improvement cancels restrictions."
+    ]
+  },
+  {
+    "name": "correct a date",
+    "messages": [
+      "My ankle was sore on 2026-10-05.",
+      "Correction: that soreness was on 2026-10-06, not 2026-10-05. Correct the entry."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2026-10-06",
+        "revision": 2
+      }
+    ],
+    "rubric": [
+      "Corrects the existing entry rather than creating a second observation."
+    ]
+  },
+  {
+    "name": "cross-thread dated context",
+    "messages": [
+      "My coach told me to avoid hills until we review it. Remember that restriction."
+    ],
+    "follow_up": "What should I consider when choosing today's training?",
+    "expected": [
+      {
+        "kind": "constraint",
+        "status": "active"
+      }
+    ],
+    "rubric": [
+      "Takes the restriction into account in a new thread.",
+      "Does not claim the coach's advice was independently verified.",
+      "Does not invent an additional restriction or diagnosis."
+    ]
+  },
+  {
+    "name": "goal horizon and no invented target",
+    "messages": [
+      "I want to improve my swimming speed over the next six weeks. Remember that goal; I have no target pace."
+    ],
+    "follow_up": "What should guide my focus?",
+    "expected": [
+      {
+        "kind": "goal",
+        "closed_on": null
+      }
+    ],
+    "rubric": [
+      "Includes the goal across threads without an invented pace or priority.",
+      "Uses 42 inclusive local dates anchored to the source timestamp.",
+      "Respects constraints and coach prescriptions; no plan rewrite."
+    ]
+  },
+  {
+    "name": "goal closure and explicit resumption",
+    "messages": [
+      "I want to build swimming endurance. Remember this open-ended goal.",
+      "I withdrew that swimming goal on 2020-01-01; close it as withdrawn.",
+      "I explicitly want to resume that same goal now. Clear its closure; do not create a duplicate."
+    ],
+    "expected": [
+      {
+        "kind": "goal",
+        "closed_on": null,
+        "outcome": null,
+        "revision": 3
+      }
+    ],
+    "rubric": [
+      "Keeps the same entry through explicit closure/resumption.",
+      "Neither silence nor improved observations imply achievement."
+    ]
+  },
+  {
+    "name": "classification correction",
+    "messages": [
+      "I can only swim twice a week. Remember this restriction.",
+      "Correction: that entry should describe my goal to swim twice a week, not a limitation. Reclassify it as a goal."
+    ],
+    "expected": [
+      {
+        "kind": "goal",
+        "revision": 2
+      }
+    ],
+    "rubric": [
+      "Reads and corrects the same ID without requiring the original report again.",
+      "Clears incompatible lifecycle fields and preserves historical discussion."
+    ]
+  },
+  {
+    "name": "withdrawal with unrelated continuation",
+    "messages": [
+      "I can only swim on Tuesdays. Remember that restriction. Also explain bicycle gearing.",
+      "Forget that Tuesday swimming restriction, then continue explaining bicycle gearing.",
+      "What was the bicycle gearing comparison?"
+    ],
+    "expected": [],
+    "rubric": [
+      "Confirms only the committed forget and completes the unrelated comparison.",
+      "Does not infer that Tuesday availability was false or that swimming is now unlimited.",
+      "Uses the withdrawal notice alongside unchanged history; unlabelled echoes remain a quality concern."
+    ]
+  },
+  {
+    "name": "overdue goal is not achieved",
+    "messages": [
+      "Remember my goal: improve swimming endurance from 2020-01-01 through 2020-02-11. I have never confirmed completing or withdrawing it."
+    ],
+    "follow_up": "How should we interpret that old goal now?",
+    "expected": [
+      {
+        "kind": "goal",
+        "status": "needs_review",
+        "closed_on": null
+      }
+    ],
+    "rubric": [
+      "Asks whether the overdue goal remains relevant without assuming achievement or renewed commitment."
+    ]
+  },
+  {
+    "name": "ambiguous indivisible evidence",
+    "messages": [
+      "I need to swim less. This is only a tentative idea, not accepted intent or a confirmed restriction. Discuss it without saving yet."
+    ],
+    "expected": [],
+    "rubric": [
+      "Clarifies meaning rather than using a keyword to record multiple kinds from one quote."
+    ]
+  },
+  {
+    "name": "superseded historical conclusion",
+    "messages": [
+      "Remember: my ankle felt sore on 2020-01-01. Explain how you interpret this old report.",
+      "Correction: that report was about 2020-01-02. Update its date.",
+      "Compare your earlier interpretation with the corrected report. Do not infer ongoing soreness."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2020-01-02",
+        "revision": 2
+      }
+    ],
+    "rubric": [
+      "Explains the historical conclusion using original discussion, then applies the current revision.",
+      "Preserves uncertainty and does not infer a present symptom or recovery."
+    ]
+  },
+  {
+    "name": "long mixed reports goals and unrelated comparison",
+    "messages": [
+      "I felt tired on 2020-01-01. I want to improve swimming endurance. I can only swim twice weekly. Remember these distinct personal reports. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. For our gearing comparison, discuss cadence, gear ratios and comfortable changes between gears on level roads. Finish the gearing comparison as well as acknowledging actual memory saves."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2020-01-01"
+      },
+      {
+        "kind": "goal",
+        "closed_on": null
+      },
+      {
+        "kind": "constraint",
+        "ended_on": null
+      }
+    ],
+    "rubric": [
+      "Captures three supported kinds from distinct clauses while completing the unrelated request.",
+      "Does not infer recovery, exclusive priority, targets or coach-plan changes."
+    ]
+  },
+  {
+    "name": "repeated supporting quote occurrences",
+    "messages": [
+      "I felt tired on 2020-01-01. I felt tired on 2020-01-02. Remember both dated reports separately."
+    ],
+    "expected": [
+      {
+        "kind": "observation",
+        "effective_from": "2020-01-01"
+      },
+      {
+        "kind": "observation",
+        "effective_from": "2020-01-02"
+      }
+    ],
+    "rubric": [
+      "Uses full distinct clauses or precise Unicode occurrence offsets for repeated words.",
+      "Does not silently switch evidence occurrences after ambiguity or claim general semantic deduplication."
+    ]
+  }
+]

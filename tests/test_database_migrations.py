@@ -44,7 +44,7 @@ def test_legacy_database_opens_through_api_without_losing_data(legacy_store):
     with TestClient(create_conversation_app(Agent(TestModel()), store.path)) as client:
         assert client.get(f"/api/threads/{thread_id}").json() == before
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
 
 def test_pending_migrations_run_in_order_once_and_keep_store_writable(legacy_store):
@@ -62,7 +62,7 @@ def test_pending_migrations_run_in_order_once_and_keep_store_writable(legacy_sto
     migrations = (*MIGRATIONS, add_archiving, archive_existing_threads)
     with store.connection() as db:
         migrate(db, migrations)
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) + 2
     after = store.get_thread(thread_id)
     assert after["title"] == before["title"]
     assert after["messages"] == before["messages"]
@@ -73,7 +73,7 @@ def test_pending_migrations_run_in_order_once_and_keep_store_writable(legacy_sto
     store.finish_run(run["id"], "completed")
     with store.connection() as db:
         migrate(db, migrations)
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) + 2
         assert (
             db.execute("SELECT archived FROM threads WHERE id = ?", (new_thread["id"],)).fetchone()[
                 0
@@ -96,7 +96,7 @@ def test_failed_migration_rolls_back_schema_data_and_version(legacy_store):
         with pytest.raises(sqlite3.OperationalError, match="missing_table"):
             migrate(db, (*MIGRATIONS, failing_upgrade))
         assert not db.in_transaction
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
         assert "archived" not in {row[1] for row in db.execute("PRAGMA table_info(threads)")}
     assert store.get_thread(thread_id) == before
 
@@ -105,7 +105,7 @@ def test_failed_migration_rolls_back_schema_data_and_version(legacy_store):
 
     with store.connection() as db:
         migrate(db, (*MIGRATIONS, successful_upgrade))
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) + 1
 
 
 def test_newer_database_prevents_application_startup(legacy_store):
@@ -172,7 +172,7 @@ def test_named_schema_migration_preserves_rows_rowids_and_payload_bytes(tmp_path
 
     with sqlite3.connect(path) as db:
         migrate(db)
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
         assert db.execute("SELECT rowid, * FROM threads ORDER BY rowid").fetchall() == [
             (9, "t1", "雪\nline", "same", "same"),
             (31, "t2", "second", "same", "same"),
@@ -213,7 +213,7 @@ def test_named_schema_migration_preserves_rows_rowids_and_payload_bytes(tmp_path
         assert {"one_active_run", "runs_by_thread"} <= indexes
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         migrate(db)
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
 
 @pytest.mark.parametrize("initial_fk", [0, 1])

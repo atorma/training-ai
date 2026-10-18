@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web run-cli test test-e2e install-browser render-k8s render-k8s-storage
+.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web run-cli test test-e2e eval-memory install-browser render-k8s render-k8s-storage
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -45,6 +45,11 @@ test:
 
 test-e2e: build-web
 	$(UV) run --locked --all-extras $(NPM) run test-e2e
+
+# Opt-in paid provider calls using fictional data and temporary SQLite; no external MCP.
+eval-memory:
+	@test -n "$(EVAL_MODEL)" || (echo "Set EVAL_MODEL to the provider model to evaluate."; exit 1)
+	$(UV) run --locked python scripts/evaluate-memory.py --model "$(EVAL_MODEL)"
 
 install-browser:
 	$(NPM) exec playwright install chromium

@@ -271,3 +271,132 @@ h2 {
     display: none;
   }
 }
+
+.memory-dialog {
+  width: min(1100px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  border: 1px solid #bccfc3;
+  border-radius: 12px;
+  color: inherit;
+  background: #f7faf8;
+  padding: 20px;
+}
+.memory-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.memory-heading,
+.memory-actions,
+.memory-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.memory-heading {
+  justify-content: space-between;
+}
+.memory-feedback {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  margin: 0 -20px;
+  padding: 4px 20px;
+  background: #f7faf8;
+  border-bottom: 1px solid #dce5df;
+}
+.memory-feedback p {
+  margin: 6px 0;
+}
+.memory-feedback [role="alert"] {
+  color: #a21c2f;
+}
+.memory-columns {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(250px, 2fr);
+  gap: 24px;
+}
+.memory-list > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.memory-list span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.memory-view label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+.memory-view input,
+.memory-view select,
+.memory-view textarea {
+  font: inherit;
+  color: inherit;
+  padding: 8px;
+  border: 1px solid #bccfc3;
+  border-radius: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+.memory-detail textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+/* Zero-height anchor: notices float over the transcript without resizing it. */
+.memory-receipts-anchor {
+  position: relative;
+  height: 0;
+  z-index: 1;
+}
+.memory-receipts {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  display: grid;
+  gap: 6px;
+  max-width: min(420px, calc(100% - 32px));
+  pointer-events: none;
+}
+.memory-receipts p {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #c8d6ce;
+  border-radius: 7px;
+  background: #edf4ef;
+  box-shadow: 0 2px 8px rgb(32 51 44 / 15%);
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+.memory-receipts button {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+@media (max-width: 650px) {
+  .memory-columns {
+    grid-template-columns: 1fr;
+  }
+  .memory-dialog {
+    padding: 12px;
+  }
+  .memory-feedback {
+    top: -12px;
+    margin: 0 -12px;
+    padding: 4px 12px;
+  }
+  .memory-heading h2 {
+    white-space: normal;
+  }
+  .memory-view input,
+  .memory-view textarea,
+  .memory-view select {
+    font-size: 16px;
+  }
+}

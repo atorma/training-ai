@@ -8,11 +8,40 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, Literal, TypedDict, cast
 from uuid import uuid4
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 
 from database_migrations import migrate
+
+RunStatus = Literal["running", "completed", "failed", "interrupted"]
+
+
+class Thread(TypedDict):
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class Run(TypedDict):
+    id: str
+    thread_id: str
+    status: RunStatus
+    user_sequence: int
+    created_at: str
+    updated_at: str
+
+
+class StoredMessage(TypedDict):
+    sequence: int
+    payload: dict[str, Any]  # One PydanticAI message in its JSON form.
+
+
+class ThreadDetail(Thread):
+    messages: list[StoredMessage]
+    run: Run | None
 
 
 class MissingThread(Exception):
@@ -71,18 +100,21 @@ class ConversationStore:
                 (now(),),
             )
 
-    def list_threads(self):
+    def list_threads(self) -> list[Thread]:
         with self.connection() as db:
             return [
-                dict(row)
+                cast(Thread, dict(row))
                 for row in db.execute("SELECT * FROM threads ORDER BY updated_at DESC, id")
             ]
 
-    def create_thread(self):
+    def create_thread(self) -> Thread:
         timestamp = now()
-        thread = dict(
-            id=str(uuid4()), title="New conversation", created_at=timestamp, updated_at=timestamp
-        )
+        thread: Thread = {
+            "id": str(uuid4()),
+            "title": "New conversation",
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
         with self.connection() as db:
             db.execute(
                 "INSERT INTO threads (id, title, created_at, updated_at) "
@@ -91,17 +123,17 @@ class ConversationStore:
             )
         return thread
 
-    def _require_thread(self, db, thread_id):
+    def _require_thread(self, db, thread_id) -> Thread:
         row = db.execute("SELECT * FROM threads WHERE id = ?", (thread_id,)).fetchone()
         if row is None:
             raise MissingThread
-        return dict(row)
+        return cast(Thread, dict(row))
 
-    def get_thread(self, thread_id):
+    def get_thread(self, thread_id) -> ThreadDetail:
         with self.connection() as db:
             db.execute("BEGIN")
             thread = self._require_thread(db, thread_id)
-            thread["messages"] = [
+            messages: list[StoredMessage] = [
                 {"sequence": row["sequence"], "payload": json.loads(row["payload"])}
                 for row in db.execute(
                     "SELECT * FROM messages WHERE thread_id = ? ORDER BY sequence", (thread_id,)
@@ -111,9 +143,7 @@ class ConversationStore:
                 "SELECT * FROM runs WHERE thread_id = ? ORDER BY rowid DESC LIMIT 1",
                 (thread_id,),
             ).fetchone()
-            thread["run"] = dict(run) if run else None
-            return thread
-        return None
+            return {**thread, "messages": messages, "run": cast(Run, dict(run)) if run else None}
 
     def rename_thread(self, thread_id, title):
         with self.connection() as db:
@@ -133,7 +163,7 @@ class ConversationStore:
                 raise RunConflict("Wait for the response to finish before deleting this thread.")
             db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
 
-    def start_run(self, thread_id, text=None):
+    def start_run(self, thread_id, text=None) -> Run:
         timestamp = now()
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -165,14 +195,14 @@ class ConversationStore:
                         "UPDATE threads SET title = ? WHERE id = ?",
                         (" ".join(text.split())[:80], thread_id),
                     )
-            run = dict(
-                id=str(uuid4()),
-                thread_id=thread_id,
-                status="running",
-                user_sequence=sequence,
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
+            run: Run = {
+                "id": str(uuid4()),
+                "thread_id": thread_id,
+                "status": "running",
+                "user_sequence": sequence,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
             db.execute(
                 "INSERT INTO runs (id, thread_id, status, user_sequence, created_at, updated_at) "
                 "VALUES (:id, :thread_id, :status, :user_sequence, "
@@ -186,7 +216,7 @@ class ConversationStore:
         thread = self.get_thread(thread_id)
         return ModelMessagesTypeAdapter.validate_python([m["payload"] for m in thread["messages"]])
 
-    def finish_run(self, run_id, status, messages=()):
+    def finish_run(self, run_id, status: RunStatus, messages=()):
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()

@@ -76,6 +76,7 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 | `make hooks` | Run pre-commit hooks, including new unstaged, nonignored files. |
 | `make test` | Run fast Python tests. |
 | `make test-e2e` | Run browser tests against the real API and temporary SQLite. |
+| `make eval-memory EVAL_MODEL=provider:model` | Opt-in live-model memory evaluation with fictional data. |
 | `make install-browser` | Reinstall Chromium if needed. |
 
 - Configure `.env` before running the server. Restart `make run-web` after frontend changes.
@@ -93,6 +94,14 @@ ESLint/Prettier, and TypeScript. Keep the Ruff hook revision aligned with its Py
 - `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
 - Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
 - `DATABASE_PATH` - SQLite file for web threads (default: `data/conversations.sqlite3`).
+- `MEMORY_OBSERVATION_DAYS` - Recent observation window (default: 30 days).
+- `MEMORY_CONTEXT_BUDGET` / `MEMORY_OBSERVATION_BUDGET` / `CONVERSATION_HISTORY_BUDGET` -
+  Independent compact JSON character allowances (12,000 / 4,000 / 64,000).
+
+Web chat shares observations, goals and constraints across threads. Use **Memory** to inspect,
+correct, end constraints, close/resume goals or forget entries.
+See [shared memory](docs/shared-training-memory.md) for
+capture defaults, deletion behavior and testing limitations.
 
 For OpenAI models using reasoning with MCP tools, select the Responses API explicitly,
 for example `MODEL=openai-responses:gpt-6.1-sol`. PydanticAI 2 also defaults `openai:` to Responses;

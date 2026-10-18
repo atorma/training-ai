@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.ui.vercel_ai import VercelAIEventStream
@@ -13,21 +14,62 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from conversation_events import SSE_HEADERS, ConversationEvents, RunStream
-from conversation_store import ConversationStore, MissingThread, RunConflict
+from conversation_store import ConversationStore, MissingThread, RunConflict, ThreadDetail
+from memory_api import memory_routes
+from memory_models import MemoryContextLimit, MemorySource, ThreadMemoryReceipt
+from memory_store import MemoryStore
+from memory_tools import MemoryDeps
 
 logger = logging.getLogger(__name__)
 
 
-def create_conversation_app(agent, database_path):
+class ThreadResponse(ThreadDetail, total=False):
+    context_error: str
+    memory_receipts: list[ThreadMemoryReceipt]
+
+
+def create_conversation_app(
+    agent,
+    database_path,
+    timezone="UTC",
+    observation_days=30,
+    memory_context_budget=12000,
+    memory_observation_budget=4000,
+    conversation_history_budget=64000,
+):
     store = ConversationStore(database_path)
     tasks = set()
     events = ConversationEvents()
+    event_loop = None
+    context_errors = {}
+
+    def notify_memory():
+        if event_loop is not None:
+            event_loop.call_soon_threadsafe(events.notify)
+
+    memory = MemoryStore(store, notify_memory, timezone)
 
     async def native_events(run):
         # Sanitize errors before the protocol encoder turns them into browser events.
         try:
+            detail = store.get_thread(run["thread_id"])
+            prompt = next(m for m in detail["messages"] if m["sequence"] == run["user_sequence"])
+            timestamp = datetime.fromisoformat(prompt["payload"]["parts"][0]["timestamp"])
+            source = MemorySource(
+                run["thread_id"], run["user_sequence"], run["id"], timestamp, timezone
+            )
+            deps = MemoryDeps(
+                memory,
+                source,
+                observation_days,
+                memory_context_budget,
+                memory_observation_budget,
+                conversation_history_budget,
+            )
+            prepared = deps.prepare()
             async with agent.run_stream_events(
-                message_history=store.history(run["thread_id"]),
+                message_history=prepared.messages,
+                deps=deps,
                 conversation_id=run["thread_id"],
                 run_id=run["id"],
             ) as stream:
@@ -35,6 +77,10 @@ def create_conversation_app(agent, database_path):
                     if isinstance(event, AgentRunResultEvent):
                         store.finish_run(run["id"], "completed", event.result.new_messages())
                     yield event
+        except MemoryContextLimit as exc:
+            context_errors[run["thread_id"]] = (run["id"], str(exc))
+            store.finish_run(run["id"], "failed")
+            raise RuntimeError(str(exc)) from None
         except asyncio.CancelledError:
             store.finish_run(run["id"], "interrupted")
             raise
@@ -61,6 +107,7 @@ def create_conversation_app(agent, database_path):
             events.notify()
 
     def launch(run):
+        context_errors.pop(run["thread_id"], None)
         stream = RunStream()
         events.runs[run["id"]] = stream
         task = asyncio.create_task(generate(run, stream))
@@ -70,6 +117,8 @@ def create_conversation_app(agent, database_path):
 
     @asynccontextmanager
     async def lifespan(app):
+        nonlocal event_loop
+        event_loop = asyncio.get_running_loop()
         with store.exclusive_session():
             store.initialize()
             store.interrupt_runs()
@@ -82,8 +131,9 @@ def create_conversation_app(agent, database_path):
                 await asyncio.gather(*pending, return_exceptions=True)
                 store.interrupt_runs()
                 events.close()
+                event_loop = None
 
-    async def text_field(request, key, limit):
+    async def text_field(request, key, limit, strip=True):
         try:
             body = await request.json()
         except (ValueError, UnicodeDecodeError):
@@ -91,7 +141,7 @@ def create_conversation_app(agent, database_path):
         value = body.get(key) if isinstance(body, dict) else None
         if not isinstance(value, str) or not value.strip() or len(value) > limit:
             return None
-        return value.strip()
+        return value.strip() if strip else value
 
     async def threads(request):
         if request.method == "POST":
@@ -109,6 +159,7 @@ def create_conversation_app(agent, database_path):
         thread_id = request.path_params["thread_id"]
         if request.method == "DELETE":
             store.delete_thread(thread_id)
+            context_errors.pop(thread_id, None)
             events.notify()
             return JSONResponse({"deleted": True})
         if request.method == "PATCH":
@@ -117,12 +168,19 @@ def create_conversation_app(agent, database_path):
                 return JSONResponse({"error": "Provide a title of 1–200 characters."}, 400)
             store.rename_thread(thread_id, title)
             events.notify()
-        return JSONResponse(store.get_thread(thread_id))
+        detail: ThreadResponse = {**store.get_thread(thread_id)}
+        error = context_errors.get(thread_id)
+        if error and detail["run"] and detail["run"]["id"] == error[0]:
+            detail["context_error"] = error[1]
+        receipts = memory.receipts(thread_id)
+        if receipts:
+            detail["memory_receipts"] = receipts
+        return JSONResponse(detail)
 
     async def send(request):
-        text = await text_field(request, "text", 32000)
+        text = await text_field(request, "text", 1000000, strip=False)
         if text is None:
-            return JSONResponse({"error": "Provide a message of 1–32000 characters."}, 400)
+            return JSONResponse({"error": "Provide a message of 1–1000000 characters."}, 400)
         run = store.start_run(request.path_params["thread_id"], text)
         launch(run)
         return JSONResponse(run, 202)
@@ -160,6 +218,7 @@ def create_conversation_app(agent, database_path):
     app = Starlette(
         lifespan=lifespan,
         routes=[
+            *memory_routes(memory),
             Route("/api/health", health),
             Route("/api/events", changes),
             Route("/api/threads", threads, methods=["GET", "POST"]),
@@ -171,4 +230,5 @@ def create_conversation_app(agent, database_path):
         exception_handlers={MissingThread: missing, RunConflict: conflict},
     )
     app.state.conversation_store = store
+    app.state.memory_store = memory
     return app

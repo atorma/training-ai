@@ -181,7 +181,7 @@ def test_invalid_requests_do_not_mutate_history(tmp_path):
     ) as client:
         thread_id = create_thread(client)
         endpoint = f"/api/threads/{thread_id}"
-        for body in [{"text": " "}, {"text": 3}, [], {"text": "x" * 32001}]:
+        for body in [{"text": " "}, {"text": 3}, [], {"text": "x" * 1000001}]:
             assert client.post(endpoint + "/messages", json=body).status_code == 400
         assert client.post(endpoint + "/messages", content="{").status_code == 400
         assert client.patch(endpoint, json={"title": ""}).status_code == 400

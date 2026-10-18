@@ -8,6 +8,7 @@ from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
 from config import Config
+from memory_tools import configure_memory_agent
 
 BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
@@ -25,6 +26,7 @@ def create_agent(config: Config) -> Agent:
     base_instructions = os.getenv("BASE_INSTRUCTIONS", BASE_INSTRUCTIONS)
     timezone = ZoneInfo(config.timezone)
     agent = Agent(config.model, instructions=base_instructions, toolsets=[mcp_server])
+    configure_memory_agent(agent)
 
     @agent.instructions
     def current_time_instructions() -> str:
