@@ -99,8 +99,9 @@ opening a source selects its conversation. Memory writes notify browsers immedia
 independently of model-response completion. Thread receipts resolve current entry text;
 forgotten entries show no retained statement. Superseded receipts show the current revision.
 Receipts appear as floating notices that disappear after five seconds without resizing the
-transcript. Opening a thread notifies only about its latest turn; a later status change, such as
-forgetting, notifies again.
+transcript. Only responses this browser started (send or retry) notify; opening, reloading or
+resuming a thread, and other devices' activity, never do. Expired notices are dropped when a
+paused background tab becomes visible again.
 Goal closure/resumption and kind correction use the same revision-checked PATCH contract.
 Required-memory overflow fails before provider use; thread detail includes `context_error` while
 the current server retains that diagnostic. It survives snapshot refreshes but not server restart.

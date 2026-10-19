@@ -280,3 +280,42 @@ test("manual forgetting lets an active answer finish and preserves unrelated con
     ),
   ).toBeVisible();
 });
+
+test("memory notices appear only for this browser's own responses", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Message" })
+    .fill("Remember synthetic ankle soreness");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Remembered: Synthetic ankle soreness",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Saved conversation: Remember synthetic ankle soreness", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const threadId = new URL(page.url()).searchParams.get("thread")!;
+  // Another device records memory in the same open conversation.
+  const other = await page.request.post(`/api/threads/${threadId}/messages`, {
+    data: { text: "Remember synthetic swimming goal" },
+  });
+  expect(other.status()).toBe(202);
+  await expect(
+    page.getByText(/Saved conversation: .*Remember synthetic swimming goal$/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Remembered: Synthetic swimming goal"),
+  ).toHaveCount(0);
+  // Opening the conversation again replays no earlier changes.
+  await page.reload();
+  await expect(
+    page.getByText(/Saved conversation: .*Remember synthetic swimming goal$/),
+  ).toBeVisible();
+  await expect(page.getByText(/^Remembered:/)).toHaveCount(0);
+});

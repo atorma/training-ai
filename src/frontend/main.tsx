@@ -209,9 +209,12 @@ function ConversationList({
 
 const RECEIPT_NOTICE_MS = 5000;
 
-function receiptKey(receipt: MemoryReceipt) {
+type Run = NonNullable<Detail["run"]>;
+
+function receiptKey(threadId: string, receipt: MemoryReceipt) {
   // Status is derived on read, so a later forget or correction notifies again.
   return [
+    threadId,
     receipt.sequence,
     receipt.action,
     receipt.entry_id,
@@ -243,33 +246,35 @@ function App() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryEntry, setMemoryEntry] = useState<string | null>(null);
   const [receiptNotices, setReceiptNotices] = useState<
-    { key: string; receipt: MemoryReceipt }[]
+    { key: string; receipt: MemoryReceipt; expires: number }[]
   >([]);
-  const seenReceipts = useRef<{ threadId: string | null; keys: Set<string> }>({
-    threadId: null,
-    keys: new Set(),
-  });
+  // Prompts whose response this browser started, per thread.
+  const watchedPrompts = useRef(new Map<string, Set<number>>());
+  const shownReceipts = useRef(new Set<string>());
   selectedRef.current = selected;
+
+  function watch(run: Pick<Run, "user_sequence"> & { thread_id: string }) {
+    const prompts = watchedPrompts.current.get(run.thread_id) ?? new Set();
+    prompts.add(run.user_sequence);
+    watchedPrompts.current.set(run.thread_id, prompts);
+  }
 
   useEffect(() => {
     if (!detail) return;
-    const receipts = detail.memory_receipts ?? [];
-    const seen = seenReceipts.current;
-    if (seen.threadId !== detail.id) {
-      // Opening a thread notifies only about its latest turn, not older history.
-      seen.threadId = detail.id;
-      seen.keys = new Set(
-        receipts
-          .filter((r) => r.sequence !== detail.run?.user_sequence)
-          .map(receiptKey),
-      );
-      setReceiptNotices([]);
-    }
-    const fresh = receipts
-      .map((receipt) => ({ key: receiptKey(receipt), receipt }))
-      .filter(({ key }) => !seen.keys.has(key));
+    // Notices are feedback on this browser's own sends and retries, never on changes
+    // found when opening, reloading or reconnecting, or made from other devices.
+    const watched = watchedPrompts.current.get(detail.id);
+    const expires = Date.now() + RECEIPT_NOTICE_MS;
+    const fresh = (detail.memory_receipts ?? [])
+      .filter((receipt) => watched?.has(receipt.sequence))
+      .map((receipt) => ({
+        key: receiptKey(detail.id, receipt),
+        receipt,
+        expires,
+      }))
+      .filter(({ key }) => !shownReceipts.current.has(key));
     if (!fresh.length) return;
-    fresh.forEach(({ key }) => seen.keys.add(key));
+    fresh.forEach(({ key }) => shownReceipts.current.add(key));
     setReceiptNotices((notices) => [...notices, ...fresh]);
     const keys = new Set(fresh.map(({ key }) => key));
     setTimeout(
@@ -278,6 +283,18 @@ function App() {
       RECEIPT_NOTICE_MS,
     );
   }, [detail]);
+
+  useEffect(() => {
+    // Background tabs (e.g. Chrome on Android) pause timers; drop expired notices on return.
+    const expire = () => {
+      if (document.visibilityState !== "visible") return;
+      setReceiptNotices((notices) =>
+        notices.filter((n) => n.expires > Date.now()),
+      );
+    };
+    document.addEventListener("visibilitychange", expire);
+    return () => document.removeEventListener("visibilitychange", expire);
+  }, []);
 
   function openMemory(id: string | null = null) {
     setMemoryEntry(id);
@@ -440,7 +457,11 @@ function App() {
         id = thread.id;
         pendingNewThread.current = id;
       }
-      await api(`/${id}/messages`, "POST", { text });
+      watch(
+        await api<Run & { thread_id: string }>(`/${id}/messages`, "POST", {
+          text,
+        }),
+      );
       if (!selectedRef.current) select(id);
     } catch (e) {
       setError(String(e));
@@ -642,7 +663,12 @@ function App() {
                 disabled={busy}
                 onClick={() =>
                   void action(async () => {
-                    await api(`/${detail.id}/retry`, "POST");
+                    watch(
+                      await api<Run & { thread_id: string }>(
+                        `/${detail.id}/retry`,
+                        "POST",
+                      ),
+                    );
                   })
                 }
               >
