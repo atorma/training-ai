@@ -1,6 +1,7 @@
 # Training AI
 
-Training assistant with CLI and persistent web conversations, using PydanticAI and MCP tools.
+Training assistant persistent web conversations and cross-thread memories.
+Built using PydanticAI and MCP tools.
 
 ## Documentation
 
@@ -34,32 +35,28 @@ Use Node.js 22.13+ (22.x), or Node.js 24+, with npm for frontend tooling.
 Activate that version in your shell before running Make targets or committing frontend changes.
 
 ```bash
+cp .env.example .env
+# edit .env with your keys and MCP server URL
 make bootstrap
 make run-web
 # open http://127.0.0.1:7932
 ```
 
-The assistant-ui frontend uses this application's API and SQLite database, without
-Assistant Cloud. Create, reopen, rename, and delete conversations from the sidebar.
-Open the same server from another browser to continue a saved conversation.
-Generation continues when you switch threads or close your browser. Replies, reasoning,
-and tool activity stream over SSE. Thread changes also arrive through SSE notifications.
-Reconnecting or reopening an active thread replays its response so far, then follows live events.
-Enter adds a new line; only the Send button sends a message.
-On phones, the header menu opens conversations; the three-dot button opens rename/delete actions.
+or with reloading
 
-By default, conversations are stored in `data/conversations.sqlite3`; set `DATABASE_PATH`
-to choose another location. This directory is ignored by Git. Restarting preserves messages
-and marks unfinished responses interrupted so you can retry. Failed responses also support
-retry. One response may run per thread; separate threads can run independently.
+```bash
+make bootstrap
+make dev-web
+# open http://localhost:5173
+```
 
-Run one server process with one worker against the database. Active stream replay buffers
-are temporary; they do not survive a server restart. CLI history remains temporary.
-Long conversations currently send their full history to the model; context summarization
-is a subsequent step. Local access uses no application login; the existing deployed ingress
-applies Basic Auth to all routes. GKE manifests include persistent SQLite storage and checked
-pre-upgrade backups; scheduled off-disk backups remain pending. See the deployment guide
-for cluster prerequisites and rollout recovery.
+Conversations are stored in SQLite. The default path is `data/conversations.sqlite3`.
+This directory is ignored by Git. Set `DATABASE_PATH` to choose another location.  
+
+Web chat shares observations, goals and constraints across threads. Use **Memory** to inspect,
+correct, end constraints, close/resume goals or forget entries.
+See [shared memory](docs/shared-training-memory.md) for
+capture defaults, deletion behavior and testing limitations.
 
 ## Development
 
@@ -104,11 +101,6 @@ ESLint/Prettier, and TypeScript. Keep the Ruff hook revision aligned with its Py
 - `MEMORY_OBSERVATION_DAYS` - Recent observation window (default: 30 days).
 - `MEMORY_CONTEXT_BUDGET` / `MEMORY_OBSERVATION_BUDGET` / `CONVERSATION_HISTORY_BUDGET` -
   Independent compact JSON character allowances (12,000 / 4,000 / 64,000).
-
-Web chat shares observations, goals and constraints across threads. Use **Memory** to inspect,
-correct, end constraints, close/resume goals or forget entries.
-See [shared memory](docs/shared-training-memory.md) for
-capture defaults, deletion behavior and testing limitations.
 
 For OpenAI models using reasoning with MCP tools, select the Responses API explicitly,
 for example `MODEL=openai-responses:gpt-6.1-sol`. PydanticAI 2 also defaults `openai:` to Responses;
