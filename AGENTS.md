@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-- Source code should live in `src/` (flat modules like `src/cli.py`).
+- Source code should live in `src/` (flat modules like `src/web.py`).
 - Tests should live in `tests/` and mirror the source tree
   (e.g., `tests/utils/test_dates.py` for `src/utils/dates.py`).
 - Supporting materials belong in `docs/`, `scripts/`, and `assets/`.
 - Deployment scripts belong in `deployment` and Kubernetes manifests in `deployment/k8s/`.
-- Keep modules small and single-purpose; prefer explicit entry points like `src/cli.py` or `src/main.py`.
+- Keep modules small and single-purpose; prefer explicit entry points like `src/web.py`.
 - Start with endpoint handlers calling concrete query/command objects that wrap database
   access and expose domain objects and mutation operations. Add service layers only when
   behavior warrants them; avoid speculative abstractions.
@@ -31,7 +31,6 @@ Use Make targets for development tasks.
 - `make build-docker` - build web assets locally, then build the Docker image.
 - `make run-web` - build the UI once and serve it on port 7932 as production does, with reload.
 - `make dev-web` - fastest UI loop: Vite hot reload on port 5173 proxying the API on port 7932.
-- `make run-cli` - start the interactive CLI agent.
 - `make test` - run fast pytest tests; browser/Playwright tests are separate.
 - `make install-browser` - reinstall Chromium separately; bootstrap includes installation.
 - `make test-e2e` - test browser flows against the real local API and temporary SQLite.

@@ -26,7 +26,6 @@ flowchart TD
     SummaryAgent --> Provider
     SummaryAgent --> MCP
     Summary -->|Optional delivery| Signal[Signal API]
-    CLI[Interactive CLI: history in RAM] --> Training
 ```
 
 | Component | Responsibility | Source |
@@ -46,7 +45,6 @@ flowchart TD
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
 | Summary path | Date-window validation, summary generation and optional Signal delivery | [summary_api.py](../src/summary_api.py), [summary_agent.py](../src/summary_agent.py), [signal_sender.py](../src/signal_sender.py) |
-| CLI | Interactive agent with temporary conversation history | [cli.py](../src/cli.py) |
 
 ## Build and serving
 

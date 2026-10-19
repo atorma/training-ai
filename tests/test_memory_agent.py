@@ -131,14 +131,11 @@ def test_corrected_and_forgotten_history_is_preserved_with_current_context(tmp_p
         assert client.get("/api/memory").json()["total"] == 0
 
 
-def test_tool_validation_rejects_fabricated_source_and_cli_has_no_memory_tools(tmp_path):
-    calls = []
-
+def test_tool_validation_rejects_fabricated_source(tmp_path):
     async def respond(messages, info):
-        calls.append([t.name for t in info.function_tools])
         if any(p.part_kind == "retry-prompt" for p in messages[-1].parts):
             yield "Cannot record unsupported content"
-        elif "record_memory" in calls[-1]:
+        else:
             yield tool(
                 "record_memory",
                 {
@@ -146,8 +143,6 @@ def test_tool_validation_rejects_fabricated_source_and_cli_has_no_memory_tools(t
                     "quote": "not in source",
                 },
             )
-        else:
-            yield "CLI without memory"
 
     agent = synthetic_agent(respond)
     with TestClient(create_conversation_app(agent, tmp_path / "memory.sqlite3")) as client:
@@ -155,15 +150,6 @@ def test_tool_validation_rejects_fabricated_source_and_cli_has_no_memory_tools(t
         client.post(f"/api/threads/{thread}/messages", json={"text": "A question, not evidence"})
         wait_for_status(client, thread)
         assert client.get("/api/memory").json()["total"] == 0
-
-    # CLI uses the same agent without MemoryDeps. Its tools must be hidden.
-    async def cli():
-        async with agent.run_stream_events("CLI question", deps=None) as stream:
-            async for _ in stream:
-                pass
-
-    asyncio.run(cli())
-    assert calls[-1] == []
 
 
 @pytest.mark.parametrize("mutation", ["forget", "correct"])

@@ -3,7 +3,7 @@
 The web assistant remembers clear personal observations, goals and constraints across conversations.
 Capture uses the conversational agent's tools and produces visible receipts for committed writes.
 Ambiguous subjects, intent, dates or correction targets need clarification. Coach PDFs, prescribed
-workouts, calendar synchronization, CLI memory and scheduled-summary integration remain deferred.
+workouts, calendar synchronization and scheduled-summary integration remain deferred.
 
 ## Inspect and change memory
 

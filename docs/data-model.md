@@ -82,7 +82,7 @@ stateDiagram-v2
 | File | `DATABASE_PATH`, default `data/conversations.sqlite3` |
 | SQLite | WAL mode, foreign keys enabled, schema `user_version = 3` |
 | Process ownership | Adjacent `.lock` file; one server process/worker per database |
-| Scope | Web conversations and shared memory; CLI history and `/summary` output remain separate |
+| Scope | Web conversations and shared memory; `/summary` output remains separate |
 
 Local restarts retain data. GKE manifests mount a persistent disk and create checked backups
 before schema upgrades. Cluster provisioning and scheduled off-disk backups remain pending;

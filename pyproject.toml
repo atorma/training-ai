@@ -22,14 +22,10 @@ dev = [
   "ruff>=0.17.0",
 ]
 
-[project.scripts]
-training-ai = "cli:main"
-
 [tool.setuptools]
 include-package-data = false
 package-dir = {"" = "src"}
 py-modules = [
-  "cli",
   "config",
   "conversation_api",
   "conversation_events",

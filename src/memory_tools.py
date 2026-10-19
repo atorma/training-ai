@@ -135,12 +135,9 @@ class MemoryDeps:
 
 
 def configure_memory_agent(agent):
-    async def available(ctx: RunContext[MemoryDeps | None], tool):
-        return tool if isinstance(ctx.deps, MemoryDeps) else None
-
     @agent.instructions
-    async def memory_instructions(ctx: RunContext[MemoryDeps | None]) -> str:
-        return ctx.deps.instructions() if isinstance(ctx.deps, MemoryDeps) else ""
+    async def memory_instructions(ctx: RunContext[MemoryDeps]) -> str:
+        return ctx.deps.instructions()
 
     def execute(fn) -> Mapping[str, Any]:
         try:
@@ -163,7 +160,7 @@ def configure_memory_agent(agent):
         except ValueError as exc:
             raise ModelRetry(str(exc)) from exc
 
-    @agent.tool(prepare=available)
+    @agent.tool
     async def search_memory(
         ctx: RunContext[MemoryDeps],
         topic: str = "",
@@ -187,12 +184,12 @@ def configure_memory_agent(agent):
             )
         )
 
-    @agent.tool(prepare=available)
+    @agent.tool
     async def get_memory(ctx: RunContext[MemoryDeps], entry_id: str) -> Mapping[str, Any]:
         """Read current facts/revision or content-free forgotten/not_found status."""
         return execute(lambda: ctx.deps.store.get(entry_id))
 
-    @agent.tool(prepare=available, sequential=True)
+    @agent.tool(sequential=True)
     async def record_memory(
         ctx: RunContext[MemoryDeps],
         data: MemoryData,
@@ -207,7 +204,7 @@ def configure_memory_agent(agent):
         """
         return execute(lambda: ctx.deps.store.record(data, ctx.deps.source, quote, part, start))
 
-    @agent.tool(prepare=available, sequential=True)
+    @agent.tool(sequential=True)
     async def change_memory(
         ctx: RunContext[MemoryDeps],
         entry_id: str,
@@ -230,7 +227,7 @@ def configure_memory_agent(agent):
             )
         )
 
-    @agent.tool(prepare=available, sequential=True)
+    @agent.tool(sequential=True)
     async def forget_memory(
         ctx: RunContext[MemoryDeps],
         entry_id: str,

@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web dev-web run-cli test test-e2e eval-memory install-browser render-k8s render-k8s-storage
+.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web dev-web test test-e2e eval-memory install-browser render-k8s render-k8s-storage
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -46,9 +46,6 @@ dev-web:
 	@WEB_PORT=$(WEB_PORT) node_modules/.bin/vite --host 0.0.0.0 & vite=$$!; \
 	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
 	$(UVICORN_DEV)
-
-run-cli:
-	$(UV) run --locked training-ai
 
 # Browser/Playwright checks are separate from the fast Python suite.
 test:
