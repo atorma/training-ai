@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: training-ai-summary
 spec:
-  schedule: "0 4 * * *"
+  schedule: "0 2 * * *"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   jobTemplate:
