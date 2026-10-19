@@ -84,32 +84,40 @@ test("Markdown tables render in chat and stay within narrow screens", async ({
   }
 });
 
-for (const submission of ["Enter", "Send button"] as const) {
-  test(`composer keeps focus after submitting with ${submission}`, async ({
-    page,
-  }) => {
-    await page.goto("/");
-    const composer = page.getByRole("textbox", { name: "Message" });
-    const send = page.getByRole("button", { name: "Send", exact: true });
-    for (const prompt of ["First focus question", "Another focus question"]) {
-      await composer.fill(prompt);
-      if (submission === "Enter") await composer.press("Enter");
-      else await send.click();
-      await expect(
-        page.getByText("Generating response… You can return later."),
-      ).toBeVisible();
-      await expect(composer).toBeFocused();
-      await expect(composer).toHaveValue("");
-      await page.keyboard.type("Draft for the next message");
-      await expect(composer).toHaveValue("Draft for the next message");
-      await expect(send).toBeDisabled();
-      await expect(page.locator(".message").last()).toContainText(prompt);
-      await expect(send).toBeEnabled();
-      await expect(composer).toBeFocused();
-      await expect(composer).toHaveValue("Draft for the next message");
-    }
-  });
-}
+test("Enter adds a new line instead of sending", async ({ page }) => {
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message" });
+  await composer.fill("First line");
+  await composer.press("Enter");
+  await page.keyboard.type("Second line");
+  await expect(composer).toHaveValue("First line\nSecond line");
+  await expect(page.locator(".message")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeEnabled();
+});
+
+test("composer keeps focus after sending", async ({ page }) => {
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Message" });
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  for (const prompt of ["First focus question", "Another focus question"]) {
+    await composer.fill(prompt);
+    await send.click();
+    await expect(
+      page.getByText("Generating response… You can return later."),
+    ).toBeVisible();
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveValue("");
+    await page.keyboard.type("Draft for the next message");
+    await expect(composer).toHaveValue("Draft for the next message");
+    await expect(send).toBeDisabled();
+    await expect(page.locator(".message").last()).toContainText(prompt);
+    await expect(send).toBeEnabled();
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveValue("Draft for the next message");
+  }
+});
 
 test("saved message timestamps persist across browsers and use each browser's time zone", async ({
   browser,

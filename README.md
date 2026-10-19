@@ -45,6 +45,7 @@ Open the same server from another browser to continue a saved conversation.
 Generation continues when you switch threads or close your browser. Replies, reasoning,
 and tool activity stream over SSE. Thread changes also arrive through SSE notifications.
 Reconnecting or reopening an active thread replays its response so far, then follows live events.
+Enter adds a new line; only the Send button sends a message.
 On phones, the header menu opens conversations; the three-dot button opens rename/delete actions.
 
 By default, conversations are stored in `data/conversations.sqlite3`; set `DATABASE_PATH`

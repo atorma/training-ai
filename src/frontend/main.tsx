@@ -693,6 +693,7 @@ function App() {
             <ComposerPrimitive.Root className="composer">
               <ComposerPrimitive.Input
                 autoFocus
+                submitMode="none"
                 aria-label="Message"
                 placeholder="Ask about your training…"
               />
