@@ -1,7 +1,12 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web dev-web test test-e2e eval-memory install-browser render-k8s render-k8s-storage
+.PHONY: bootstrap install-browser
+.PHONY: lint lint-fix hooks
+.PHONY: build build-web build-docker
+.PHONY: run-web dev-web
+.PHONY: test test-e2e eval-memory
+.PHONY: render-k8s render-k8s-storage build-and-deploy-k8s
 
 bootstrap:
 	$(UV) sync --all-extras --locked
