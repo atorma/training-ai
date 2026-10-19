@@ -108,6 +108,7 @@ def test_summary_request_enforces_ranges():
 
 
 def test_summary_handler_returns_ranges(monkeypatch):
+    monkeypatch.setenv("LOGFIRE_IGNORE_NO_CONFIG", "1")
     monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
     agent = StubAgent("stub summary")
     handler = summary_api.create_summary_handler(agent)
