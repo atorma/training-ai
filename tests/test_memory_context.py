@@ -14,8 +14,8 @@ from pydantic_ai.messages import (
 )
 from test_memory_api import observation, record, source
 
-from memory_context import compact, prepare_memory
-from memory_models import MemoryContextLimit, MemoryData, MemorySource
+from training_ai.memory_context import compact, prepare_memory
+from training_ai.memory_models import MemoryContextLimit, MemoryData, MemorySource
 
 TODAY = date(2026, 10, 15)
 
@@ -253,9 +253,9 @@ def test_unknown_structured_id_is_not_withdrawal_and_incomplete_tools_are_omitte
 def test_frozen_message_fixture_upgrade_decode_and_history_preparation(tmp_path):
     from pathlib import Path
 
-    from conversation_store import ConversationStore
-    from database_migrations import MIGRATIONS, migrate
-    from memory_store import MemoryStore
+    from training_ai.conversation_store import ConversationStore
+    from training_ai.database_migrations import MIGRATIONS, migrate
+    from training_ai.memory_store import MemoryStore
 
     fixture = Path("tests/fixtures/messages-pydantic-ai-2.json").read_bytes()
     messages = ModelMessagesTypeAdapter.validate_json(fixture)
@@ -341,8 +341,8 @@ def test_preparation_reads_one_consistent_snapshot_during_concurrent_edits(memor
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import contextmanager
 
-    from conversation_store import ConversationStore
-    from memory_store import MemoryStore
+    from training_ai.conversation_store import ConversationStore
+    from training_ai.memory_store import MemoryStore
 
     store = memory_client.app.state.memory_store
     originals = [

@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-from memory_models import MemoryContextLimit, MissingMemory, model_memory
+from training_ai.memory_models import MemoryContextLimit, MissingMemory, model_memory
 
 
 def compact(value):

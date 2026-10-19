@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from memory_models import ForgetMemory, MemoryChange, MemoryConflict, MissingMemory
+from training_ai.memory_models import ForgetMemory, MemoryChange, MemoryConflict, MissingMemory
 
 
 def memory_routes(store):

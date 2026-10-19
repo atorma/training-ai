@@ -8,10 +8,10 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
-from conversation_api import create_conversation_app
-from memory_context import prepare_memory
-from memory_models import AmbiguousEvidence, MemoryConflict, MemoryData, MemorySource
-from memory_tools import MemoryDeps
+from training_ai.conversation_api import create_conversation_app
+from training_ai.memory_context import prepare_memory
+from training_ai.memory_models import AmbiguousEvidence, MemoryConflict, MemoryData, MemorySource
+from training_ai.memory_tools import MemoryDeps
 
 
 @pytest.fixture

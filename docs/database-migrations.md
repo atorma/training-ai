@@ -1,7 +1,7 @@
 # Database migrations
 
 All application database schema changes and persistent data transformations must use
-[database_migrations.py](../src/database_migrations.py). This includes new tables, columns,
+[database_migrations.py](../src/training_ai/database_migrations.py). This includes new tables, columns,
 indexes, constraints, backfills, and changes to saved message JSON. Runtime queries and
 commands stay in their store modules; connection settings such as WAL and foreign keys
 remain connection/setup responsibilities.
@@ -30,7 +30,7 @@ New stores using this database must use the same runner and registry.
 
 ## Adding a migration
 
-1. Add a named function to `src/database_migrations.py`.
+1. Add a named function to `src/training_ai/database_migrations.py`.
 2. Append it to `MIGRATIONS`. Never edit, remove, or reorder an applied migration.
 3. Add real-SQLite tests for upgrades with existing data, fresh initialization, and relevant
    constraints or failure behavior. Run `make test` and `make hooks`.

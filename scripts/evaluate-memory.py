@@ -9,9 +9,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from starlette.testclient import TestClient
 
-from config import Config
-from conversation_api import create_conversation_app
-from training_agent import create_agent
+from training_ai.config import Config
+from training_ai.conversation_api import create_conversation_app
+from training_ai.training_agent import create_agent
 
 
 def run_turn(client, thread_id, text):

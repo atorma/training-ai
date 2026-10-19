@@ -15,7 +15,7 @@ def memory_client(tmp_path):
     from pydantic_ai.models.test import TestModel
     from starlette.testclient import TestClient
 
-    from conversation_api import create_conversation_app
+    from training_ai.conversation_api import create_conversation_app
 
     with TestClient(
         create_conversation_app(Agent(TestModel(call_tools=[])), tmp_path / "memory.sqlite3")

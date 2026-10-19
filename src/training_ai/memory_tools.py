@@ -10,8 +10,8 @@ from pydantic import Field
 from pydantic_ai import ModelRetry, RunContext
 from typing_extensions import Annotated
 
-from memory_context import PreparedMemory, compact, prepare_memory
-from memory_models import (
+from training_ai.memory_context import PreparedMemory, compact, prepare_memory
+from training_ai.memory_models import (
     AmbiguousEvidence,
     MemoryConflict,
     MemoryData,
@@ -19,7 +19,7 @@ from memory_models import (
     MissingMemory,
     model_memory,
 )
-from memory_store import MemoryStore
+from training_ai.memory_store import MemoryStore
 
 MEMORY_INSTRUCTIONS = """
 # Shared training memory

@@ -22,10 +22,10 @@ FROM dependencies AS builder
 COPY README.md ./
 COPY src ./src
 # Built locally by make build-web before invoking Docker.
-COPY src/web_assets/static ./src/web_assets/static
+COPY src/training_ai/web_assets/static ./src/training_ai/web_assets/static
 
 RUN --mount=type=cache,id=training-ai-uv-${TARGETARCH},target=/root/.cache/uv \
-    test -s src/web_assets/static/index.html \
+    test -s src/training_ai/web_assets/static/index.html \
     && uv sync --locked --no-dev --no-editable \
     && uv pip check --python /opt/venv/bin/python
 
@@ -48,4 +48,4 @@ EXPOSE 7932
 
 USER 1000:1000
 
-CMD ["uvicorn", "web:app", "--host", "0.0.0.0", "--port", "7932", "--timeout-graceful-shutdown", "5"]
+CMD ["uvicorn", "training_ai.web:app", "--host", "0.0.0.0", "--port", "7932", "--timeout-graceful-shutdown", "5"]

@@ -10,8 +10,8 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from starlette.testclient import TestClient
 from test_conversation_api import create_thread, wait_for_status
 
-from conversation_api import create_conversation_app
-from memory_tools import configure_memory_agent
+from training_ai.conversation_api import create_conversation_app
+from training_ai.memory_tools import configure_memory_agent
 
 
 def latest_prompt(messages):
@@ -252,7 +252,7 @@ def test_history_references_receive_current_revisions_or_withdrawals(tmp_path, m
 def test_required_overflow_fails_before_provider_use(tmp_path, future_ending):
     from test_memory_api import record
 
-    from memory_models import MemoryData
+    from training_ai.memory_models import MemoryData
 
     async def respond(messages, info):
         pytest.fail("Provider must not be called on required context overflow")
@@ -286,7 +286,7 @@ def test_inflight_context_stays_prepared_and_next_turn_is_fresh(tmp_path, mutati
 
     from test_memory_api import record
 
-    from memory_models import MemoryData
+    from training_ai.memory_models import MemoryData
 
     ready, released = threading.Event(), threading.Event()
     outgoing = []
@@ -476,7 +476,7 @@ def latest_prompt_messages(saved):
 def test_conversational_reclassification_reads_existing_entry_without_repeated_report(tmp_path):
     from test_memory_api import record
 
-    from memory_models import MemoryData
+    from training_ai.memory_models import MemoryData
 
     entry = None
     prompt = "That swimming entry is a goal, not a restriction; correct its kind"
@@ -574,7 +574,7 @@ def test_mixed_kinds_partial_retry_uses_three_distinct_clauses(tmp_path):
 def test_required_overflow_can_be_resolved_in_memory_then_retried(tmp_path):
     from test_memory_api import record
 
-    from memory_models import MemoryData
+    from training_ai.memory_models import MemoryData
 
     prompts = []
 

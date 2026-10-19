@@ -25,28 +25,10 @@ dev = [
 [tool.setuptools]
 include-package-data = false
 package-dir = {"" = "src"}
-py-modules = [
-  "config",
-  "conversation_api",
-  "conversation_events",
-  "conversation_store",
-  "database_backup",
-  "database_migrations",
-  "memory_api",
-  "memory_context",
-  "memory_models",
-  "memory_store",
-  "memory_tools",
-  "signal_sender",
-  "summary_agent",
-  "summary_api",
-  "training_agent",
-  "web",
-]
-packages = ["web_assets"]
+packages = ["training_ai"]
 
 [tool.setuptools.package-data]
-web_assets = ["static/index.html", "static/assets/*"]
+training_ai = ["web_assets/static/index.html", "web_assets/static/assets/*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

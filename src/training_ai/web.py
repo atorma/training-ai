@@ -8,12 +8,12 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.staticfiles import StaticFiles
 
-from config import load_config
-from conversation_api import create_conversation_app
-from signal_sender import build_signal_sender
-from summary_agent import create_summary_agent
-from summary_api import create_summary_handler
-from training_agent import create_agent
+from training_ai.config import load_config
+from training_ai.conversation_api import create_conversation_app
+from training_ai.signal_sender import build_signal_sender
+from training_ai.summary_agent import create_summary_agent
+from training_ai.summary_api import create_summary_handler
+from training_ai.training_agent import create_agent
 
 
 def create_app() -> Starlette:

@@ -18,8 +18,8 @@ from starlette.status import (
     HTTP_503_SERVICE_UNAVAILABLE,
 )
 
-from signal_sender import SignalSender, SignalSendError
-from summary_agent import Summary
+from training_ai.signal_sender import SignalSender, SignalSendError
+from training_ai.summary_agent import Summary
 
 DEFAULT_USER_MESSAGE = "Summarize my activity and fitness development."
 LOGGER = logging.getLogger(__name__)

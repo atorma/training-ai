@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
-from config import Config
-from memory_tools import configure_memory_agent
+from training_ai.config import Config
+from training_ai.memory_tools import configure_memory_agent
 
 BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "

@@ -1,6 +1,6 @@
 # Data model
 
-Implemented in [conversation_store.py](../src/conversation_store.py).
+Implemented in [conversation_store.py](../src/training_ai/conversation_store.py).
 See also [application components](application-components.md) and
 [frontend communication](frontend-backend.md).
 
@@ -96,8 +96,8 @@ deployment recovery.
 
 ## Shared training memory
 
-[MemoryStore](../src/memory_store.py) provides concrete transactional queries/commands.
-[MemoryData](../src/memory_models.py) validates observations, constraints and goals; API/model
+[MemoryStore](../src/training_ai/memory_store.py) provides concrete transactional queries/commands.
+[MemoryData](../src/training_ai/memory_models.py) validates observations, constraints and goals; API/model
 JSON is a projection, not the persistence contract.
 
 | Table | Responsibility |
@@ -197,8 +197,9 @@ Migration 3 creates this undeployed replacement schema after conversation naming
 runner preserves original messages. Future deployed evolution must preserve every historical
 revision/topic/source/receipt through explicit forward migrations; there is no memory format tag.
 
-[Context preparation](../src/memory_context.py) reads one consistent snapshot per turn: required
-constraints/open goals/retry context, separately bounded recent observations, then newest complete
-history with reference additions. Historical memory results are never rewritten. Unknown IDs do
-not prove withdrawal. See [shared training memory](shared-training-memory.md) for budgets,
-precedence, lifecycle and the preserved-history forgetting scope.
+[Context preparation](../src/training_ai/memory_context.py) reads one consistent snapshot per
+turn: required constraints/open goals/retry context, separately bounded recent observations,
+then newest complete history with reference additions. Historical memory results are never
+rewritten. Unknown IDs do not prove withdrawal. See
+[shared training memory](shared-training-memory.md) for budgets, precedence, lifecycle and the
+preserved-history forgetting scope.

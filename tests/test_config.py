@@ -1,6 +1,6 @@
 import pytest
 
-import config
+from training_ai import config
 
 
 def configure_environment(monkeypatch):

@@ -6,7 +6,7 @@ const backend = `http://127.0.0.1:${process.env.WEB_PORT ?? "7932"}`;
 
 export default defineConfig({
   plugins: [react()],
-  build: { outDir: "src/web_assets/static", emptyOutDir: true },
+  build: { outDir: "src/training_ai/web_assets/static", emptyOutDir: true },
   server: {
     port: 5173,
     strictPort: true,

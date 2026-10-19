@@ -2,17 +2,18 @@
 
 ## Project Structure & Module Organization
 
-- Source code should live in `src/` (flat modules like `src/web.py`).
+- Python source lives in the `src/training_ai/` package (flat modules like
+  `src/training_ai/web.py`). Add subpackages only when a feature group outgrows flat modules.
 - Tests should live in `tests/` and mirror the source tree
-  (e.g., `tests/utils/test_dates.py` for `src/utils/dates.py`).
+  (e.g., `tests/test_web.py` for `src/training_ai/web.py`).
 - Supporting materials belong in `docs/`, `scripts/`, and `assets/`.
 - Deployment scripts belong in `deployment` and Kubernetes manifests in `deployment/k8s/`.
-- Keep modules small and single-purpose; prefer explicit entry points like `src/web.py`.
+- Keep modules small and single-purpose; prefer explicit entry points like `training_ai.web:app`.
 - Start with endpoint handlers calling concrete query/command objects that wrap database
   access and expose domain objects and mutation operations. Add service layers only when
   behavior warrants them; avoid speculative abstractions.
 - All database schema changes and persistent data migrations must use the shared runner
-  and append-only registry in `src/database_migrations.py`. Never edit applied migrations.
+  and append-only registry in `src/training_ai/database_migrations.py`. Never edit applied migrations.
   Follow `docs/database-migrations.md` and add real-SQLite upgrade/data-preservation tests.
 
 ## Build, Test, and Development Commands

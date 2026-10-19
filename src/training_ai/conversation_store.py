@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 
-from database_migrations import migrate
+from training_ai.database_migrations import migrate
 
 RunStatus = Literal["running", "completed", "failed", "interrupted"]
 

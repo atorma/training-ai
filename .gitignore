@@ -18,7 +18,7 @@ dist/
 .ruff_cache/
 data/
 node_modules/
-src/web_assets/static/
+src/training_ai/web_assets/static/
 playwright-report/
 test-results/
 

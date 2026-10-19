@@ -5,7 +5,7 @@ from typing import Optional, Protocol
 
 import httpx
 
-from config import Config
+from training_ai.config import Config
 
 
 class SignalSendError(RuntimeError):

@@ -6,9 +6,9 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
-from conversation_api import create_conversation_app
-from conversation_store import ConversationStore
-from database_migrations import MIGRATIONS, Migration, _conversation_naming, migrate
+from training_ai.conversation_api import create_conversation_app
+from training_ai.conversation_store import ConversationStore
+from training_ai.database_migrations import MIGRATIONS, Migration, _conversation_naming, migrate
 
 
 @pytest.fixture

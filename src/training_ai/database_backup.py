@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from conversation_store import ConversationStore
-from database_migrations import MIGRATIONS
+from training_ai.conversation_store import ConversationStore
+from training_ai.database_migrations import MIGRATIONS
 
 
 def backup_before_upgrade(

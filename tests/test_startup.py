@@ -12,7 +12,7 @@ def test_startup_without_logfire_credentials(tmp_path):
         "MCP_SERVER_URL": "http://127.0.0.1:1/mcp",
     }
     result = subprocess.run(
-        [sys.executable, "-m", "web"],
+        [sys.executable, "-m", "training_ai.web"],
         text=True,
         capture_output=True,
         cwd=tmp_path,

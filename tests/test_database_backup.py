@@ -7,9 +7,9 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
-from conversation_api import create_conversation_app
-from conversation_store import ConversationStore
-from database_backup import backup_before_upgrade
+from training_ai.conversation_api import create_conversation_app
+from training_ai.conversation_store import ConversationStore
+from training_ai.database_backup import backup_before_upgrade
 
 
 def populated_store(tmp_path):

@@ -43,7 +43,7 @@ Generation runs independently of both SSE subscriptions. No WebSocket connection
 
 ## Endpoints
 
-Implemented in [conversation_api.py](../src/conversation_api.py).
+Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 `{id}` below is the thread UUID.
 
 | Method | Path | Request JSON | Success response |

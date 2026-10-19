@@ -33,7 +33,7 @@ spec:
         - name: database-backup
           image: training-ai-server-image
           imagePullPolicy: Always
-          command: ["python", "-m", "database_backup"]
+          command: ["python", "-m", "training_ai.database_backup"]
           args: ["/app/data/conversations.sqlite3", "/app/data/backups"]
           volumeMounts:
             - name: data

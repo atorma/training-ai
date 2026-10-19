@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 from test_memory_api import observation, record, source
 
-from database_migrations import MIGRATIONS, migrate, shared_training_memory
+from training_ai.database_migrations import MIGRATIONS, migrate, shared_training_memory
 
 
 def test_every_foreign_key_has_parent_unique_and_full_child_index(memory_client):
@@ -118,7 +118,7 @@ def test_operation_validation_and_atomic_mutation_receipt_rollback(memory_client
 
 
 def test_memory_migration_from_named_schema_rolls_back_and_preserves_payload_bytes(tmp_path):
-    from conversation_store import ConversationStore
+    from training_ai.conversation_store import ConversationStore
 
     store = ConversationStore(tmp_path / "named.sqlite3")
     store.path.parent.mkdir(parents=True, exist_ok=True)

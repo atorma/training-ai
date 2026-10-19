@@ -9,8 +9,8 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
-from conversation_api import create_conversation_app
-from conversation_store import ConversationStore
+from training_ai.conversation_api import create_conversation_app
+from training_ai.conversation_store import ConversationStore
 
 
 def wait_for_status(client, thread_id, expected="completed"):

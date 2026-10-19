@@ -13,12 +13,17 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from conversation_events import SSE_HEADERS, ConversationEvents, RunStream
-from conversation_store import ConversationStore, MissingThread, RunConflict, ThreadDetail
-from memory_api import memory_routes
-from memory_models import MemoryContextLimit, MemorySource, ThreadMemoryReceipt
-from memory_store import MemoryStore
-from memory_tools import MemoryDeps
+from training_ai.conversation_events import SSE_HEADERS, ConversationEvents, RunStream
+from training_ai.conversation_store import (
+    ConversationStore,
+    MissingThread,
+    RunConflict,
+    ThreadDetail,
+)
+from training_ai.memory_api import memory_routes
+from training_ai.memory_models import MemoryContextLimit, MemorySource, ThreadMemoryReceipt
+from training_ai.memory_store import MemoryStore
+from training_ai.memory_tools import MemoryDeps
 
 logger = logging.getLogger(__name__)
 

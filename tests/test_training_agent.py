@@ -5,9 +5,9 @@ from pydantic_ai.models.function import FunctionModel
 from starlette.testclient import TestClient
 from test_conversation_api import create_thread, wait_for_status
 
-import training_agent
-from config import Config
-from conversation_api import create_conversation_app
+from training_ai import training_agent
+from training_ai.config import Config
+from training_ai.conversation_api import create_conversation_app
 
 
 @pytest.mark.parametrize(

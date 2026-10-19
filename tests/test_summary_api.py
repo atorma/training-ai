@@ -8,8 +8,8 @@ import pytest
 from pydantic import ValidationError
 from starlette.requests import Request
 
-import summary_api
-from signal_sender import SignalSendError, SignalSendResult
+from training_ai import summary_api
+from training_ai.signal_sender import SignalSendError, SignalSendResult
 
 
 class FixedDateTime(real_datetime):

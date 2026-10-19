@@ -8,8 +8,8 @@ from typing import cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from conversation_store import ConversationStore, now
-from memory_models import (
+from training_ai.conversation_store import ConversationStore, now
+from training_ai.memory_models import (
     Action,
     AmbiguousEvidence,
     ForgottenMemory,

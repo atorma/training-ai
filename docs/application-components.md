@@ -30,21 +30,21 @@ flowchart TD
 
 | Component | Responsibility | Source |
 | --- | --- | --- |
-| Web entry point | Load configuration, create agents, register routes, serve built UI | [web.py](../src/web.py) |
-| Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/conversation_api.py) |
-| Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/conversation_store.py) |
-| Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/database_migrations.py) |
-| Upgrade backup | Checked SQLite backup under the ownership lock before Kubernetes upgrades | [database_backup.py](../src/database_backup.py) |
-| Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/conversation_events.py) |
-| Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_agent.py) |
-| Shared memory | Validated observations/goals/constraints, versioned commands, source links and receipts | [memory_models.py](../src/memory_models.py), [memory_store.py](../src/memory_store.py) |
-| Memory agent integration | Per-run dependencies, sequential memory tools and fixed turn instructions | [memory_tools.py](../src/memory_tools.py) |
-| Memory context | Atomic turn selection, independent budgets and current reference resolution | [memory_context.py](../src/memory_context.py) |
-| Memory management | HTTP inspection/edit/forget commands and responsive browser view | [memory_api.py](../src/memory_api.py), [memory.tsx](../src/frontend/memory.tsx) |
+| Web entry point | Load configuration, create agents, register routes, serve built UI | [web.py](../src/training_ai/web.py) |
+| Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/training_ai/conversation_api.py) |
+| Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/training_ai/conversation_store.py) |
+| Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/training_ai/database_migrations.py) |
+| Upgrade backup | Checked SQLite backup under the ownership lock before Kubernetes upgrades | [database_backup.py](../src/training_ai/database_backup.py) |
+| Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/training_ai/conversation_events.py) |
+| Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_ai/training_agent.py) |
+| Shared memory | Validated observations/goals/constraints, versioned commands, source links and receipts | [memory_models.py](../src/training_ai/memory_models.py), [memory_store.py](../src/training_ai/memory_store.py) |
+| Memory agent integration | Per-run dependencies, sequential memory tools and fixed turn instructions | [memory_tools.py](../src/training_ai/memory_tools.py) |
+| Memory context | Atomic turn selection, independent budgets and current reference resolution | [memory_context.py](../src/training_ai/memory_context.py) |
+| Memory management | HTTP inspection/edit/forget commands and responsive browser view | [memory_api.py](../src/training_ai/memory_api.py), [memory.tsx](../src/frontend/memory.tsx) |
 | Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
-| Summary path | Date-window validation, summary generation and optional Signal delivery | [summary_api.py](../src/summary_api.py), [summary_agent.py](../src/summary_agent.py), [signal_sender.py](../src/signal_sender.py) |
+| Summary path | Date-window validation, summary generation and optional Signal delivery | [summary_api.py](../src/training_ai/summary_api.py), [summary_agent.py](../src/training_ai/summary_agent.py), [signal_sender.py](../src/training_ai/signal_sender.py) |
 
 ## Build and serving
 
@@ -58,7 +58,7 @@ continue to use their own explicit `timezone` and date ranges.
 
 ```mermaid
 flowchart LR
-    Source[src/frontend] -->|Vite / Node| Assets[src/web_assets/static]
+    Source[src/frontend] -->|Vite / Node| Assets[src/training_ai/web_assets/static]
     Assets -->|Served by Starlette| Browser[Browser]
     Assets --> Package[Python package / Docker image]
 ```

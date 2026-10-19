@@ -39,7 +39,7 @@ build-docker:
 	sh deployment/build.sh
 
 WEB_PORT ?= 7932
-UVICORN_DEV = $(UV) run --locked uvicorn web:app --host 0.0.0.0 --port $(WEB_PORT) --reload \
+UVICORN_DEV = $(UV) run --locked uvicorn training_ai.web:app --host 0.0.0.0 --port $(WEB_PORT) --reload \
 	--timeout-graceful-shutdown 5
 
 # Serves the built bundle as production does; use dev-web for frontend work.

@@ -11,8 +11,8 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
-from conversation_api import create_conversation_app
-from memory_tools import configure_memory_agent
+from training_ai.conversation_api import create_conversation_app
+from training_ai.memory_tools import configure_memory_agent
 
 models.ALLOW_MODEL_REQUESTS = False
 failed_prompts = set()
@@ -92,5 +92,8 @@ async def compatibility_thread(request):
 
 app.add_route("/test/compatibility-thread", compatibility_thread, methods=["POST"])
 app.mount(
-    "/", StaticFiles(directory=Path(__file__).parents[1] / "src/web_assets/static", html=True)
+    "/",
+    StaticFiles(
+        directory=Path(__file__).parents[1] / "src/training_ai/web_assets/static", html=True
+    ),
 )
