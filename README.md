@@ -67,7 +67,8 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 
 | Command | Purpose |
 | --- | --- |
-| `make run-web` | Build the frontend and start the server with Python reload. |
+| `make dev-web` | Fastest UI loop: Vite hot reload on port 5173 plus the API server. |
+| `make run-web` | Build the frontend once and serve it as production does, with Python reload. |
 | `make build-web` | Compile frontend assets. |
 | `make build` | Build frontend assets and Python packages in `dist/`. |
 | `make build-docker` | Build frontend assets locally, then package the Docker image. |
@@ -79,7 +80,12 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 | `make eval-memory EVAL_MODEL=provider:model` | Opt-in live-model memory evaluation with fictional data. |
 | `make install-browser` | Reinstall Chromium if needed. |
 
-- Configure `.env` before running the server. Restart `make run-web` after frontend changes.
+- Configure `.env` before running the server.
+- For UI work, run `make dev-web` and open <http://127.0.0.1:5173>: React edits apply without
+  a page reload and Python edits restart Uvicorn. Vite proxies `/api` to port 7932.
+- `make run-web` serves the built bundle as production does; rerun it after frontend changes.
+  `make dev-web` does not type-check, so run `make lint` before committing.
+- Set `WEB_PORT` to use another server port, for example `make dev-web WEB_PORT=7940`.
 - If hooks or `make lint-fix` change files, review the changes and rerun the checks.
 - Browser tests use port 7933 and synthetic model responses; no live model or MCP calls.
 - Docker builds require BuildKit/buildx and `GCLOUD_REPOSITORY` in `deployment/.env`.

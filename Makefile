@@ -1,7 +1,7 @@
 UV ?= uv
 NPM ?= npm
 
-.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web run-cli test test-e2e eval-memory install-browser render-k8s render-k8s-storage
+.PHONY: bootstrap lint lint-fix hooks build build-web build-docker run-web dev-web run-cli test test-e2e eval-memory install-browser render-k8s render-k8s-storage
 
 bootstrap:
 	$(UV) sync --all-extras --locked
@@ -33,8 +33,19 @@ build-web:
 build-docker:
 	sh deployment/build.sh
 
+WEB_PORT ?= 7932
+UVICORN_DEV = $(UV) run --locked uvicorn web:app --host 0.0.0.0 --port $(WEB_PORT) --reload \
+	--timeout-graceful-shutdown 5
+
+# Serves the built bundle as production does; use dev-web for frontend work.
 run-web: build-web
-	$(UV) run --locked uvicorn web:app --host 0.0.0.0 --port 7932 --reload --timeout-graceful-shutdown 5
+	$(UVICORN_DEV)
+
+# Fastest UI loop: Vite hot reload on port 5173, proxying API calls to Uvicorn.
+dev-web:
+	@WEB_PORT=$(WEB_PORT) node_modules/.bin/vite --host 0.0.0.0 & vite=$$!; \
+	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
+	$(UVICORN_DEV)
 
 run-cli:
 	$(UV) run --locked training-ai

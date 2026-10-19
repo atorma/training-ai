@@ -65,7 +65,10 @@ flowchart LR
     Assets --> Package[Python package / Docker image]
 ```
 
-- `make run-web`: build UI, then start Uvicorn with reload on port **7932**.
+- `make run-web`: build UI once, then start Uvicorn with reload on port **7932**, serving the
+  built assets as production does.
+- `make dev-web`: Vite dev server with hot module reload on port **5173**, proxying `/api` and
+  `/summary` to Uvicorn with reload on port 7932. Override the server port with `WEB_PORT`.
 - `make build-web`: build static UI assets; `make build`: also package Python and assets.
 - Node is build tooling. The application server is Python; no Assistant Cloud integration.
 - Local access has no application login. Deployment manifests apply Basic Auth at the ingress.
