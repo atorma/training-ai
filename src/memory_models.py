@@ -73,6 +73,7 @@ class MemoryData(BaseModel):
             raise ValueError("A constraint cannot end before it starts.")
         if (
             self.outcome == "achieved"
+            and self.closed_on
             and self.effective_from
             and self.closed_on < self.effective_from
         ):
@@ -119,6 +120,7 @@ class MemoryContextLimit(Exception):
 Kind = Literal["observation", "constraint", "goal"]
 Status = Literal["valid", "active", "ended", "upcoming", "needs_review", "achieved", "withdrawn"]
 Action = Literal["record", "change", "forget"]
+ReceiptStatus = Literal["applied", "already_applied", "superseded", "forgotten"]
 
 
 class MemoryFields(TypedDict):
@@ -198,7 +200,7 @@ class MemoryReceipt(TypedDict):
     """Outcome of a mutation; a request against a forgotten target has no revision or entry."""
 
     action: Action
-    status: Literal["applied", "already_applied", "superseded", "forgotten"]
+    status: ReceiptStatus
     entry_id: str
     applied_revision: NotRequired[int]
     entry: NotRequired[MemoryEntry | None]
@@ -231,15 +233,13 @@ def lifecycle(data: MemoryFields, today: str) -> Status:
     return "active"
 
 
-def model_memory(entry: MemoryEntry | ForgottenMemory) -> ModelMemory | ForgottenMemory:
+def model_memory(entry: MemoryEntry) -> ModelMemory:
     """Current facts and identity; detailed provenance belongs in the inspection API."""
-    if entry["status"] == "forgotten":
-        return entry
-    return {
-        "id": entry["id"],
-        "revision": entry["revision"],
-        "recorded_at": entry["recorded_at"],
-        "updated_at": entry["updated_at"],
-        "status": entry["status"],
+    return ModelMemory(
+        id=entry["id"],
+        revision=entry["revision"],
+        recorded_at=entry["recorded_at"],
+        updated_at=entry["updated_at"],
+        status=entry["status"],
         **entry["data"],
-    }
+    )

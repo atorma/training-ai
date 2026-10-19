@@ -143,7 +143,9 @@ class ConversationStore:
                 "SELECT * FROM runs WHERE thread_id = ? ORDER BY rowid DESC LIMIT 1",
                 (thread_id,),
             ).fetchone()
-            return {**thread, "messages": messages, "run": cast(Run, dict(run)) if run else None}
+            return ThreadDetail(
+                **thread, messages=messages, run=cast(Run, dict(run)) if run else None
+            )
 
     def rename_thread(self, thread_id, title):
         with self.connection() as db:

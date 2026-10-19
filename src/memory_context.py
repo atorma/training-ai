@@ -93,13 +93,14 @@ class _Pools:
         if entry_id in self.supplied:
             return
         try:
-            entry = self.store._entry(self.db, entry_id, self.today.isoformat())
+            forgotten = self.store._forgotten_entry(self.db, entry_id)
         except MissingMemory:
             return  # Unknown IDs do not establish withdrawal.
         self.supplied.add(entry_id)
-        if entry["status"] == "forgotten":
-            pool["withdrawals"].append(entry)
+        if forgotten is not None:
+            pool["withdrawals"].append(forgotten)
         else:
+            entry = self.store._live_entry(self.db, entry_id, self.today.isoformat())
             pool["entries"].append(model_memory(entry))
 
 

@@ -40,7 +40,7 @@ def create_conversation_app(
     store = ConversationStore(database_path)
     tasks = set()
     events = ConversationEvents()
-    event_loop = None
+    event_loop: asyncio.AbstractEventLoop | None = None
     context_errors = {}
 
     def notify_memory():
@@ -168,7 +168,7 @@ def create_conversation_app(
                 return JSONResponse({"error": "Provide a title of 1–200 characters."}, 400)
             store.rename_thread(thread_id, title)
             events.notify()
-        detail: ThreadResponse = {**store.get_thread(thread_id)}
+        detail = ThreadResponse(**store.get_thread(thread_id))
         error = context_errors.get(thread_id)
         if error and detail["run"] and detail["run"]["id"] == error[0]:
             detail["context_error"] = error[1]

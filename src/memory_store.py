@@ -24,6 +24,7 @@ from memory_models import (
     MemorySource,
     MemorySourceLink,
     MissingMemory,
+    ReceiptStatus,
     ThreadMemoryReceipt,
     lifecycle,
 )
@@ -58,40 +59,52 @@ class MemoryStore:
             "status": lifecycle(data, today or self._today()),
         }
 
-    def _entry(self, db, entry_id, today=None) -> MemoryEntry | ForgottenMemory:
+    @staticmethod
+    def _parent(db, entry_id):
         parent = db.execute("SELECT * FROM memory_entries WHERE id=?", (entry_id,)).fetchone()
         if parent is None:
             raise MissingMemory("Memory entry not found.")
+        return parent
+
+    # Callers check _forgotten_entry before _live_entry: an explicit None check narrows the
+    # type in every checker, whereas `status == "forgotten"` does not narrow in IntelliJ.
+    def _forgotten_entry(self, db, entry_id) -> ForgottenMemory | None:
+        parent = self._parent(db, entry_id)
+        if not parent["forgotten_at"]:
+            return None
+        if db.execute("SELECT 1 FROM memory_revisions WHERE entry_id=?", (entry_id,)).fetchone():
+            raise RuntimeError("Forgotten memory has revisions.")
+        return {"id": entry_id, "status": "forgotten", "forgotten_at": parent["forgotten_at"]}
+
+    def _live_entry(self, db, entry_id, today=None) -> MemoryEntry:
+        parent = self._parent(db, entry_id)
         if parent["forgotten_at"]:
-            if db.execute(
-                "SELECT 1 FROM memory_revisions WHERE entry_id=?", (entry_id,)
-            ).fetchone():
-                raise RuntimeError("Forgotten memory has revisions.")
-            return {"id": entry_id, "status": "forgotten", "forgotten_at": parent["forgotten_at"]}
+            raise RuntimeError("Expected live memory.")
         row = db.execute("SELECT * FROM current_memory WHERE entry_id=?", (entry_id,)).fetchone()
         if row is None:
             raise RuntimeError("Live memory has no revision.")
         revision = self._revision(db, row, today)
-        return {
-            "id": entry_id,
-            "revision": row["revision"],
-            "recorded_at": parent["recorded_at"],
-            "updated_at": row["changed_at"],
-            "status": revision["status"],
+        return MemoryEntry(
             **revision["data"],
-            "data": revision["data"],
-        }
+            id=entry_id,
+            revision=row["revision"],
+            recorded_at=parent["recorded_at"],
+            updated_at=row["changed_at"],
+            status=revision["status"],
+            data=revision["data"],
+        )
 
-    def _live_entry(self, db, entry_id, today=None) -> MemoryEntry:
-        entry = self._entry(db, entry_id, today)
-        if entry["status"] == "forgotten":
-            raise RuntimeError("Expected live memory.")
-        return entry
+    def _entry(self, db, entry_id, today=None) -> MemoryEntry | ForgottenMemory:
+        forgotten = self._forgotten_entry(db, entry_id)
+        if forgotten is not None:
+            return forgotten
+        return self._live_entry(db, entry_id, today)
 
     def _detail(self, db, entry_id) -> MemoryDetail | ForgottenMemory:
-        entry = self._entry(db, entry_id)
-        if entry["status"] == "forgotten":
-            return entry
+        forgotten = self._forgotten_entry(db, entry_id)
+        if forgotten is not None:
+            return forgotten
+        entry = self._live_entry(db, entry_id)
         rows = db.execute(
             "SELECT * FROM memory_revisions WHERE entry_id=? ORDER BY revision DESC", (entry_id,)
         ).fetchall()
@@ -110,7 +123,7 @@ class MemoryStore:
             for row in rows
             if row["origin"] == "conversation"
         ]
-        return {**entry, "history": history, "sources": sources}
+        return MemoryDetail(**entry, history=history, sources=sources)
 
     def get(self, entry_id) -> MemoryDetail | ForgottenMemory:
         with self.conversations.connection() as db:
@@ -220,8 +233,9 @@ class MemoryStore:
         )
 
     def _outcome(self, db, row, reused=True) -> MemoryReceipt:
-        entry = self._entry(db, row["target_entry_id"])
-        live = None if entry["status"] == "forgotten" else entry
+        entry_id = row["target_entry_id"]
+        live = None if self._forgotten_entry(db, entry_id) else self._live_entry(db, entry_id)
+        status: ReceiptStatus
         if row["action"] == "forget":
             if live:
                 raise RuntimeError("Forget receipt points to live memory.")
@@ -357,15 +371,14 @@ class MemoryStore:
                 receipt = self._receipt(db, source, key)
                 if receipt:
                     return receipt
-            old = self._entry(db, entry_id)
-            if old["status"] == "forgotten":
+            if self._forgotten_entry(db, entry_id):
                 return {
                     "action": action,
                     "status": "forgotten",
                     "entry_id": entry_id,
                     "reused": False,
                 }
-            self._check_revision(old, expected_revision)
+            self._check_revision(self._live_entry(db, entry_id), expected_revision)
             revision = expected_revision
             if action == "forget":
                 if source:
@@ -374,6 +387,7 @@ class MemoryStore:
                 db.execute("UPDATE memory_entries SET forgotten_at=? WHERE id=?", (now(), entry_id))
                 entry = None
             else:
+                assert data is not None  # change() always supplies destination data
                 self._validate_report_date(
                     data,
                     timestamp or datetime.now(self.timezone),
@@ -401,13 +415,13 @@ class MemoryStore:
             (thread_id, sequence, sequence),
         ).fetchall()
         return [
-            {
+            ThreadMemoryReceipt(
                 **self._outcome(db, row),
-                "sequence": row["sequence"],
-                "part": row["part"],
-                "start": row["start"],
-                "end": row["end"],
-            }
+                sequence=row["sequence"],
+                part=row["part"],
+                start=row["start"],
+                end=row["end"],
+            )
             for row in rows
         ]
 
