@@ -60,3 +60,7 @@ render-k8s:
 
 render-k8s-storage:
 	kubectl kustomize deployment/k8s/storage
+
+build-and-deploy-k8s: build-docker
+	sh deployment/push.sh
+	sh deployment/deploy.sh
