@@ -7,7 +7,6 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
 
 from training_ai.config import Config
-from training_ai.memory_tools import configure_memory_agent
 
 DEFAULT_BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
@@ -35,7 +34,6 @@ def create_summary_agent(config: Config) -> Agent[Summary, str]:
         instructions=base_instructions,
         toolsets=[mcp_server],
     )
-    configure_memory_agent(agent)
 
     @agent.instructions
     def date_range_instructions(ctx: RunContext[Summary]) -> str:
