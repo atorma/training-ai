@@ -39,6 +39,7 @@ instructions
 # Personal persistent agent context
 .agent/
 .codex
+.claude
 
 # Operating systems
 .DS_Store
