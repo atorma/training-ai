@@ -6,9 +6,15 @@ from datetime import datetime as real_datetime
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
 from starlette.requests import Request
+from starlette.testclient import TestClient
 
 from training_ai import summary_api
+from training_ai.app import create_app
+from training_ai.config import Config
+from training_ai.memory_models import MemoryData, MemorySource
 from training_ai.signal_sender import SignalSendError, SignalSendResult
 
 
@@ -61,9 +67,12 @@ def make_request(body: bytes) -> Request:
     return Request(scope, receive)
 
 
-def test_compute_date_range_uses_yesterday(monkeypatch):
+@pytest.fixture(autouse=True)
+def set_up(monkeypatch):
     monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
 
+
+def test_compute_date_range_uses_yesterday():
     one_day = summary_api._compute_date_range(1, "Europe/London")
     assert one_day.start == "2025-03-09"
     assert one_day.end == "2025-03-09"
@@ -108,8 +117,6 @@ def test_summary_request_enforces_ranges():
 
 
 def test_summary_handler_returns_ranges(monkeypatch):
-    monkeypatch.setenv("LOGFIRE_IGNORE_NO_CONFIG", "1")
-    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
     agent = StubAgent("stub summary")
     handler = summary_api.create_summary_handler(agent)
     payload = {
@@ -144,8 +151,7 @@ def test_summary_handler_rejects_invalid_json():
     assert body["code"] == "validation_error"
 
 
-def test_summary_handler_sends_signal(monkeypatch):
-    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+def test_summary_handler_sends_signal():
     agent = StubAgent("stub summary")
     sender = StubSignalSender(timestamp="abc123")
     handler = summary_api.create_summary_handler(agent, sender)
@@ -165,8 +171,7 @@ def test_summary_handler_sends_signal(monkeypatch):
     assert sender.last_message == "stub summary"
 
 
-def test_summary_handler_rejects_signal_without_sender(monkeypatch):
-    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+def test_summary_handler_rejects_signal_without_sender():
     agent = StubAgent("stub summary")
     handler = summary_api.create_summary_handler(agent)
     payload = {
@@ -184,8 +189,7 @@ def test_summary_handler_rejects_signal_without_sender(monkeypatch):
     assert agent.last_message is None
 
 
-def test_summary_handler_rejects_signal_failure(monkeypatch):
-    monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
+def test_summary_handler_rejects_signal_failure():
     agent = StubAgent("stub summary")
     sender = StubSignalSender(error=SignalSendError("nope"))
     handler = summary_api.create_summary_handler(agent, sender)
@@ -201,3 +205,65 @@ def test_summary_handler_rejects_signal_failure(monkeypatch):
     assert response.status_code == 503
     body = json.loads(response.body.decode("utf-8"))
     assert body["code"] == "signal_error"
+
+
+@pytest.mark.xfail(strict=True)
+def test_summary_api_uses_memories(tmp_path, monkeypatch):
+    config = Config(
+        model="test",
+        mcp_server_url="http://unused.invalid/mcp",
+        mcp_basic_auth_username=None,
+        mcp_basic_auth_password=None,
+        signal_api_url=None,
+        signal_number=None,
+        signal_basic_auth_username=None,
+        signal_basic_auth_password=None,
+        database_path=tmp_path / "chat.sqlite3",
+    )
+
+    model_requests = []
+
+    def respond(messages, info):
+        model_requests.append((messages, info.instructions))
+        return ModelResponse(
+            parts=[TextPart(content="Some response")],
+            provider_details=None,
+            provider_response_id=None,
+        )
+
+    app = create_app(config)
+    # TestClient initializes conversation store
+    with TestClient(app) as client:
+        # Required evidence for synthetic memory
+        conversation_store = app.state.conversation_store
+        thread = conversation_store.create_thread()
+        run = conversation_store.start_run(thread["id"], "Some message")
+        prompt = conversation_store.get_thread(thread["id"])["messages"][0]["payload"]["parts"][0]
+        conversation_store.finish_run(run["id"], "completed")
+        memory_source = MemorySource(
+            thread_id=thread["id"],
+            sequence=1,
+            run_id=run["id"],
+            timestamp=real_datetime.fromisoformat(prompt["timestamp"]),
+            timezone="Europe/London",
+        )
+        memory_data = MemoryData(kind="observation", statement="Some memory", topics=["topic"])
+
+        app.state.memory_store.record(data=memory_data, source=memory_source, quote="message")
+
+        agent = app.state.summary_agent
+        with agent.override(model=FunctionModel(function=respond), toolsets=[]):
+            response = client.post(
+                "/summary",
+                json={
+                    "send_signal": False,
+                    "activity_days": 1,
+                    "fitness_days": 7,
+                    "timezone": "Europe/London",
+                },
+            )
+
+            assert response.status_code == 200
+            assert len(model_requests) == 1
+            _, instructions = model_requests[0]
+            assert "Some memory" in instructions
