@@ -30,7 +30,9 @@ flowchart TD
 
 | Component | Responsibility | Source |
 | --- | --- | --- |
-| Web entry point | Load configuration, create agents, register routes, serve built UI | [web.py](../src/training_ai/web.py) |
+| Application factory | Build the Starlette app from a `Config`: create agents, register routes, serve built UI, expose agents on `app.state` for tests | [app.py](../src/training_ai/app.py) |
+| Web entry point | Load configuration from the environment and expose the ASGI `app` for Uvicorn | [web.py](../src/training_ai/web.py) |
+| Configuration | Parse and validate environment variables into a `Config` | [config.py](../src/training_ai/config.py) |
 | Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/training_ai/conversation_api.py) |
 | Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/training_ai/conversation_store.py) |
 | Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/training_ai/database_migrations.py) |
@@ -62,17 +64,6 @@ flowchart LR
     Assets -->|Served by Starlette| Browser[Browser]
     Assets --> Package[Python package / Docker image]
 ```
-
-- `make run-web`: build UI once, then start Uvicorn with reload on port **7932**, serving the
-  built assets as production does.
-- `make dev-web`: Vite dev server with hot module reload on port **5173**, proxying `/api` and
-  `/summary` to Uvicorn with reload on port 7932. Override the server port with `WEB_PORT`.
-- `make build-web`: build static UI assets; `make build`: also package Python and assets.
-- Node is build tooling. The application server is Python; no Assistant Cloud integration.
-- Local access has no application login. Deployment manifests apply Basic Auth at the ingress.
-- Optional Logfire instrumentation is configured by the Python entry points.
-- On narrow screens, navigation opens in a modal drawer; thread actions use a compact popover.
-- Uvicorn allows five seconds for graceful shutdown before cancelling open SSE connections.
 
 See [data model](data-model.md) and [frontend communication](frontend-backend.md).
 See [Kubernetes deployment](kubernetes-deployment.md) for storage, backups, and rollout recovery.

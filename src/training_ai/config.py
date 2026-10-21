@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
@@ -23,6 +24,7 @@ class Config:
     memory_context_budget: int = 12000
     memory_observation_budget: int = 4000
     conversation_history_budget: int = 64000
+    database_path: str | Path = "data/conversations.sqlite3"
 
     def mcp_headers(self) -> dict[str, str] | None:
         return _basic_auth_header(self.mcp_basic_auth_username, self.mcp_basic_auth_password)
@@ -43,12 +45,15 @@ def load_config() -> Config:
     load_dotenv()
     model = os.getenv("MODEL", "").strip()
     mcp_server_url = os.getenv("MCP_SERVER_URL", "").strip()
+    database_path = os.getenv("DATABASE_PATH", "data/conversations.sqlite3").strip()
 
     missing = []
     if not model:
         missing.append("MODEL")
     if not mcp_server_url:
         missing.append("MCP_SERVER_URL")
+    if not database_path:
+        missing.append("DATABASE_PATH")
     if missing:
         missing_list = ", ".join(missing)
         raise RuntimeError(f"Missing required environment variables: {missing_list}")
@@ -89,4 +94,5 @@ def load_config() -> Config:
         memory_context_budget=context_budget,
         memory_observation_budget=observation_budget,
         conversation_history_budget=history_budget,
+        database_path=database_path,
     )
