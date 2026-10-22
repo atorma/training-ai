@@ -1,9 +1,11 @@
 """Selection budgets, original history, and reference resolution against real SQLite."""
 
 import json
+import os
 from datetime import date
 
 import pytest
+from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
     ModelRequest,
@@ -12,12 +14,25 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
 )
+from pydantic_ai.models.test import TestModel
+from starlette.testclient import TestClient
 from test_memory_api import observation, record, source
 
+from training_ai.conversation_api import create_conversation_app
 from training_ai.memory_context import compact, prepare_memory
 from training_ai.memory_models import MemoryContextLimit, MemoryData, MemorySource
 
 TODAY = date(2026, 10, 15)
+
+
+@pytest.fixture
+def memory_client():
+    with TestClient(
+        create_conversation_app(
+            Agent(TestModel(call_tools=[])), database_path=os.getenv("DATABASE_PATH")
+        )
+    ) as client:
+        yield client
 
 
 def current_source(memory_client, thread, text="Continue unrelated gearing"):

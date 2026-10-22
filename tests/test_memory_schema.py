@@ -3,9 +3,21 @@
 import sqlite3
 
 import pytest
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+from starlette.testclient import TestClient
 from test_memory_api import observation, record, source
 
+from training_ai.conversation_api import create_conversation_app
 from training_ai.database_migrations import MIGRATIONS, migrate, shared_training_memory
+
+
+@pytest.fixture
+def memory_client(tmp_path):
+    with TestClient(
+        create_conversation_app(Agent(TestModel(call_tools=[])), tmp_path / "memory.sqlite3")
+    ) as client:
+        yield client
 
 
 def test_every_foreign_key_has_parent_unique_and_full_child_index(memory_client):
