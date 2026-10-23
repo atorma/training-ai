@@ -101,6 +101,16 @@ class MemorySource:
     timezone: str
 
 
+@dataclass(frozen=True)
+class MemoryLimits:
+    """Context allowances in characters of compact JSON and the observation recency window."""
+
+    observation_days: int = 30
+    required_budget: int = 12000
+    observation_budget: int = 4000
+    history_budget: int = 64000
+
+
 class MissingMemory(Exception):
     pass
 

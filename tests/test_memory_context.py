@@ -19,10 +19,11 @@ from starlette.testclient import TestClient
 from test_memory_api import constraint, goal, observation, record, source
 
 from training_ai.conversation_api import create_conversation_app
-from training_ai.memory_context import compact, prepare_memory
+from training_ai.memory_context import compact, prepare_memory, read_memory_context
 from training_ai.memory_models import (
     MemoryContextLimit,
     MemoryData,
+    MemoryLimits,
     MemorySource,
     model_memory,
 )
@@ -569,3 +570,62 @@ def test_prepared_memory_for_turn_context(memory_client):
     assert all("instructions" not in m for m in prepared.history["messages"])
     assert len(prepared.messages) == 5
     assert prepared.messages[-1].parts[0].content == "I felt strong on the bike today"
+
+
+def test_read_memory_context_needs_no_source_and_matches_turn_preparation(memory_client):
+    """Required memory and recent observations without a conversation turn, same selection."""
+    store = memory_client.app.state.memory_store
+    open_goal = recorded(
+        memory_client,
+        goal(statement="Gravel race", effective_from=date(2026, 11, 1), date_precision="exact"),
+    )
+    open_constraint = recorded(memory_client, constraint(statement="No running"))
+    recent_observation = recorded(memory_client, observation(statement="Swim felt slow"))
+    recorded(
+        memory_client,
+        constraint(statement="No lifting", ended_on=date(2026, 6, 1), date_precision="unknown"),
+    )
+    recorded(
+        memory_client,
+        goal(statement="Triathlon", closed_on=TODAY, outcome="withdrawn"),
+    )
+    recorded(
+        memory_client,
+        observation(
+            statement="Shoulder pain",
+            effective_to=TODAY - timedelta(days=31),
+            date_precision="approximate",
+        ),
+    )
+    forgotten = recorded(memory_client, observation(statement="Mistaken report"))
+    store.forget(forgotten["id"], 1)
+
+    context = read_memory_context(store, TODAY)
+
+    required = sorted(
+        (model_memory(open_goal), model_memory(open_constraint)), key=lambda e: e["id"]
+    )
+    assert context.required.entries == required
+    assert context.required.withdrawals == []
+    assert context.observations.entries == [model_memory(recent_observation)]
+    assert context.context == {"entries": required + [model_memory(recent_observation)]}
+    assert compact(context.context) == compact({"entries": context.context["entries"]})
+    fresh = prepare_memory(store, source(memory_client, "Analyze my training"), TODAY)
+    assert fresh.context["entries"] == context.context["entries"]
+
+
+def test_read_memory_context_applies_required_and_observation_budgets(memory_client):
+    store = memory_client.app.state.memory_store
+    recorded(memory_client, constraint(statement="雪 no running"))
+    recorded(memory_client, observation(statement="Swim felt slow"))
+    context = read_memory_context(store, TODAY)
+    size = len(compact(context.required.payload()))
+    assert len(compact(context.required.payload()).encode()) > size
+    exact = read_memory_context(store, TODAY, MemoryLimits(required_budget=size))
+    assert exact.required == context.required
+    with pytest.raises(MemoryContextLimit, match="MEMORY_CONTEXT_BUDGET"):
+        read_memory_context(store, TODAY, MemoryLimits(required_budget=size - 1))
+    starved = read_memory_context(store, TODAY, MemoryLimits(observation_budget=10))
+    assert starved.required == context.required
+    assert starved.observations.entries == []
+    assert starved.context == {"entries": context.required.entries}
