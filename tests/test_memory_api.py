@@ -9,7 +9,7 @@ from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
 from training_ai.conversation_api import create_conversation_app
-from training_ai.memory_context import prepare_memory
+from training_ai.conversation_context import prepare_turn
 from training_ai.memory_models import AmbiguousEvidence, MemoryConflict, MemoryData, MemorySource
 from training_ai.memory_tools import MemoryDeps
 
@@ -62,6 +62,11 @@ def record(client, data=None, text="Synthetic discomfort since Monday"):
     return receipt["entry"], support
 
 
+def recorded(client, data):
+    """Record from a fresh thread whose message and quote are the statement itself."""
+    return record(client, data, data.statement)[0]
+
+
 def test_memory_api_correction_conflict_dates_and_history(client):
     entry, support = record(client)
     endpoint = f"/api/memory/{entry['id']}"
@@ -107,7 +112,7 @@ def test_constraint_lifecycle_does_not_infer_recovery(client):
     )
     constraint, support = record(client, data)
     record(client, observation("Feeling better today"), "Feeling better today")
-    context = prepare_memory(
+    context = prepare_turn(
         client.app.state.memory_store, source(client, "New question"), datetime.now(UTC).date()
     ).context
     assert (
@@ -126,7 +131,7 @@ def test_constraint_lifecycle_does_not_infer_recovery(client):
     )
     assert all(
         e["id"] != constraint["id"]
-        for e in prepare_memory(
+        for e in prepare_turn(
             client.app.state.memory_store, source(client, "New question"), datetime.now(UTC).date()
         ).context["entries"]
     )
@@ -196,11 +201,11 @@ def test_future_constraint_ending_remains_context_until_transition(client):
     store = client.app.state.memory_store
     support = source(client, "Unrelated question")
     for today in (date(2026, 10, 11), date(2026, 10, 17)):
-        context = prepare_memory(store, support, today).context
+        context = prepare_turn(store, support, today).context
         assert [item["id"] for item in context["entries"]] == [entry["id"]]
         assert context["entries"][0]["ended_on"] == "2026-10-18"
-    assert prepare_memory(store, support, date(2026, 10, 18)).context["entries"] == []
-    assert prepare_memory(store, support, date(2026, 10, 19)).context["entries"] == []
+    assert prepare_turn(store, support, date(2026, 10, 18)).context["entries"] == []
+    assert prepare_turn(store, support, date(2026, 10, 19)).context["entries"] == []
 
 
 def test_replaced_status_requires_atomic_linked_replacement(client):
@@ -339,12 +344,12 @@ def test_goal_lifecycle_reclassification_and_history(client):
     assert store.receipts(support.thread_id)[0]["status"] == "superseded"
     new_source = source(client, "Unrelated question")
     assert entry["id"] in {
-        e["id"] for e in prepare_memory(store, new_source, date(2026, 10, 15)).required["entries"]
+        e["id"] for e in prepare_turn(store, new_source, date(2026, 10, 15)).required.entries
     }
     closed = data | {"closed_on": "2026-02-11", "outcome": "achieved"}
     response = client.patch(endpoint, json={"expected_revision": 2, "data": closed})
     assert response.status_code == 200 and response.json()["status"] == "achieved"
-    assert not prepare_memory(store, new_source, date(2026, 10, 15)).required["entries"]
+    assert not prepare_turn(store, new_source, date(2026, 10, 15)).required.entries
     resumed = client.patch(endpoint, json={"expected_revision": 3, "data": data})
     assert resumed.status_code == 200 and resumed.json()["revision"] == 4
     detail = client.get(endpoint).json()

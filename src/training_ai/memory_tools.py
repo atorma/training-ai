@@ -10,11 +10,13 @@ from pydantic import Field
 from pydantic_ai import ModelRetry, RunContext
 from typing_extensions import Annotated
 
-from training_ai.memory_context import PreparedMemory, compact, prepare_memory
+from training_ai.conversation_context import PreparedTurn, prepare_turn
+from training_ai.memory_context import compact
 from training_ai.memory_models import (
     AmbiguousEvidence,
     MemoryConflict,
     MemoryData,
+    MemoryLimits,
     MemorySource,
     MissingMemory,
     model_memory,
@@ -109,18 +111,20 @@ class MemoryDeps:
     context_budget: int = 12000
     observation_budget: int = 4000
     history_budget: int = 64000
-    prepared: PreparedMemory | None = None
+    prepared: PreparedTurn | None = None
 
-    def prepare(self):
+    def prepare(self) -> PreparedTurn:
         if self.prepared is None:
-            self.prepared = prepare_memory(
+            self.prepared = prepare_turn(
                 self.store,
                 self.source,
                 datetime.now(ZoneInfo(self.source.timezone)).date(),
-                self.observation_days,
-                self.context_budget,
-                self.observation_budget,
-                self.history_budget,
+                MemoryLimits(
+                    self.observation_days,
+                    self.context_budget,
+                    self.observation_budget,
+                    self.history_budget,
+                ),
             )
         return self.prepared
 

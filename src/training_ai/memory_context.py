@@ -1,4 +1,4 @@
-"""Memory selection from a consistent SQLite snapshot, with or without a conversation turn."""
+"""Thread-independent memory selection from a consistent SQLite snapshot."""
 
 import json
 import sqlite3
@@ -8,14 +8,11 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, cast
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
-
 from training_ai.memory_models import (
     ForgottenMemory,
     MemoryContextLimit,
     MemoryEntry,
     MemoryLimits,
-    MemorySource,
     MissingMemory,
     ModelMemory,
     model_memory,
@@ -112,10 +109,11 @@ class Selection:
         self.supplied = trial.supplied
 
 
-def enforce_budget(payload: Any, budget: int) -> None:
+def enforce_budget(payload: Any, budget: int, what: str = "Required memory") -> None:
+    """Callers pass exactly the projection they emit, so the count matches the prompt."""
     if len(compact(payload)) > budget:
         raise MemoryContextLimit(
-            f"Required memory or retry context exceeds MEMORY_CONTEXT_BUDGET ({budget} characters). "
+            f"{what} exceeds MEMORY_CONTEXT_BUDGET ({budget} characters). "
             "Manage shared memory or increase the configured allowance."
         )
 
@@ -166,7 +164,8 @@ def select_observations(selection: Selection, days: int, budget: int) -> Pool:
     for entry in _recent_observations(snapshot.entries(), snapshot.today, days):
         if entry["id"] in selection.supplied:
             continue
-        candidate = {"entries": pool.entries + [model_memory(entry)]}
+        # Cost the cached projection that selection.add will append, not a fresh copy.
+        candidate = {"entries": [*pool.entries, snapshot.resolve(entry["id"])]}
         if len(compact(candidate)) <= budget:
             selection.add(pool, entry["id"])
     return pool
@@ -192,203 +191,10 @@ def read_memory_context(
     with open_snapshot(store, today) as snapshot:
         selection = Selection(snapshot)
         required = select_required(selection)
-        enforce_budget(required.payload(), limits.required_budget)
+        # Required entries only: this context has no receipts and select_required adds no
+        # withdrawals, so count the same projection MemoryContext.context emits.
+        enforce_budget({"entries": required.entries}, limits.required_budget)
         observations = select_observations(
             selection, limits.observation_days, limits.observation_budget
         )
     return MemoryContext(required, observations)
-
-
-# Thread-bound preparation. Moves to conversation_context.py in the next stage.
-
-Payload = dict[str, Any]
-Turn = list[tuple[int, Payload]]
-
-
-@dataclass(frozen=True)
-class PreparedMemory:
-    messages: list[ModelMessage]
-    required: dict[str, list]
-    observations: dict[str, list]
-    history: dict[str, list]
-
-    @property
-    def context(self) -> dict[str, list]:
-        return {
-            "entries": self.required["entries"]
-            + self.observations["entries"]
-            + self.history["entries"],
-            "receipts": self.required["receipts"],
-            "withdrawals": self.required["withdrawals"] + self.history["withdrawals"],
-        }
-
-
-def _structured_ids(payload: Payload) -> set[str]:
-    ids: set[str] = set()
-
-    def visit(value: Any) -> None:
-        if isinstance(value, dict):
-            for key, child in value.items():
-                if key in ("id", "entry_id", "target_entry_id") and isinstance(child, str):
-                    ids.add(child)
-                else:
-                    visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-
-    for part in payload["parts"]:
-        if part.get("tool_name") not in {
-            "search_memory",
-            "get_memory",
-            "record_memory",
-            "change_memory",
-            "forget_memory",
-        }:
-            continue
-        value = part.get("args") if part["part_kind"] == "tool-call" else part.get("content")
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except ValueError:
-                continue
-        visit(value)
-    return ids
-
-
-def _complete(payloads: list[Payload]) -> bool:
-    if not payloads or payloads[-1]["kind"] != "response":
-        return False
-    pending: set[str] = set()
-    for payload in payloads:
-        for part in payload["parts"]:
-            if part["part_kind"] == "tool-call":
-                call_id = part["tool_call_id"]
-                if call_id in pending:
-                    return False
-                pending.add(call_id)
-            elif part["part_kind"] in ("tool-return", "retry-prompt") and part.get("tool_call_id"):
-                if part["tool_call_id"] not in pending:
-                    return False
-                pending.remove(part["tool_call_id"])
-    return not pending
-
-
-def _add_receipts(selection: Selection, required: Pool, source: MemorySource) -> list[Payload]:
-    """This message's retry receipts; their targets join the required pool."""
-    receipts: list[Payload] = []
-    snapshot = selection.snapshot
-    for receipt in snapshot.store._receipts(snapshot.db, source.thread_id, source.sequence):
-        receipts.append({k: v for k, v in receipt.items() if k not in ("entry", "reused")})
-        selection.add(required, receipt["entry_id"])
-    return receipts
-
-
-def _load_turns(db: sqlite3.Connection, source: MemorySource) -> tuple[list[Turn], Payload]:
-    """Completed earlier turns as (sequence, payload) lists, and the current message payload."""
-    rows = db.execute(
-        "SELECT sequence, payload FROM messages WHERE thread_id=? AND sequence<=? ORDER BY sequence",
-        (source.thread_id, source.sequence),
-    ).fetchall()
-    turns: list[Turn] = []
-    current: Payload | None = None
-    for row in rows:
-        payload = json.loads(row["payload"])
-        if row["sequence"] == source.sequence:
-            current = payload
-            break
-        if any(p["part_kind"] == "user-prompt" for p in payload["parts"]):
-            turns.append([])
-        if turns:
-            turns[-1].append((row["sequence"], payload))
-    if current is None:
-        raise ValueError("The current source message no longer exists.")
-    completed_sources = {
-        r[0]
-        for r in db.execute(
-            "SELECT DISTINCT user_sequence FROM runs WHERE thread_id=? AND status='completed'",
-            (source.thread_id,),
-        )
-    }
-    completed = [
-        turn
-        for turn in turns
-        if turn[0][0] in completed_sources and _complete([p for _, p in turn])
-    ]
-    return completed, current
-
-
-def _turn_refs(db: sqlite3.Connection, thread_id: str, turn: Turn) -> set[str]:
-    """Entry IDs in memory tool calls/results, plus revisions and receipts sourced in the turn."""
-    refs: set[str] = set()
-    for sequence, payload in turn:
-        refs.update(_structured_ids(payload))
-        refs.update(
-            r[0]
-            for r in db.execute(
-                "SELECT entry_id FROM memory_revisions WHERE source_thread_id=? AND source_sequence=? "
-                "UNION SELECT target_entry_id FROM memory_operations WHERE thread_id=? AND sequence=?",
-                (thread_id, sequence, thread_id, sequence),
-            )
-        )
-    return refs
-
-
-def _history_projection(models: list[ModelMessage]) -> list[Payload]:
-    """JSON projection used for costing; historical instructions are replaced, not replayed."""
-    projection = ModelMessagesTypeAdapter.dump_python(models, mode="json")
-    for message in projection:
-        if message["kind"] == "request":
-            message.pop("instructions", None)
-    return projection
-
-
-def _history_pool(
-    selection: Selection, source: MemorySource, turns: list[Turn], budget: int
-) -> tuple[dict[str, list], list[ModelMessage]]:
-    """Newest-first contiguous fill: stop at the first turn that does not fit with its references."""
-    history: dict[str, list] = {"messages": [], "entries": [], "withdrawals": []}
-    selected: list[ModelMessage] = []
-    pool = Pool()
-    for turn in reversed(turns):
-        trial, candidate = selection.fork(), pool.copy()
-        for entry_id in sorted(_turn_refs(selection.snapshot.db, source.thread_id, turn)):
-            trial.add(candidate, entry_id)
-        models = ModelMessagesTypeAdapter.validate_python([p for _, p in turn])
-        projected = {
-            "messages": _history_projection(models) + history["messages"],
-            **candidate.payload(),
-        }
-        if len(compact(projected)) > budget:
-            break
-        selection.commit(trial)
-        pool, history = candidate, projected
-        selected = models + selected
-    return history, selected
-
-
-def prepare_memory(
-    store: MemoryStore,
-    source: MemorySource,
-    today: date,
-    days: int = 30,
-    required_budget: int = 12000,
-    observation_budget: int = 4000,
-    history_budget: int = 64000,
-) -> PreparedMemory:
-    """Read identities, receipts, current revisions and original messages atomically."""
-    with open_snapshot(store, today) as snapshot:
-        selection = Selection(snapshot)
-        required_pool = select_required(selection)
-        receipts = _add_receipts(selection, required_pool, source)
-        required: dict[str, list] = {
-            "entries": required_pool.entries,
-            "receipts": receipts,
-            "withdrawals": required_pool.withdrawals,
-        }
-        enforce_budget(required, required_budget)
-        observations = {"entries": select_observations(selection, days, observation_budget).entries}
-        turns, current = _load_turns(snapshot.db, source)
-        history, selected = _history_pool(selection, source, turns, history_budget)
-    messages = selected + ModelMessagesTypeAdapter.validate_python([current])
-    return PreparedMemory(messages, required, observations, history)
