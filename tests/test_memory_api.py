@@ -36,16 +36,24 @@ def source(client, text, timestamp=None):
             )
     store.finish_run(run["id"], "failed")
     return MemorySource(
-        thread["id"],
-        1,
-        run["id"],
-        datetime.fromisoformat(timestamp or prompt["timestamp"]),
-        "Europe/Helsinki",
+        thread_id=thread["id"],
+        sequence=1,
+        run_id=run["id"],
+        timestamp=datetime.fromisoformat(timestamp or prompt["timestamp"]),
+        timezone="Europe/Helsinki",
     )
 
 
-def observation(statement="Synthetic discomfort since Monday", **overrides):
-    return MemoryData(kind="observation", statement=statement, topics=["ankle"], **overrides)
+def observation(statement="Synthetic discomfort since Monday", topics=("ankle",), **overrides):
+    return MemoryData(kind="observation", statement=statement, topics=list(topics), **overrides)
+
+
+def constraint(statement="Synthetic constraint since 2026-04-01", topics=("running",), **overrides):
+    return MemoryData(kind="constraint", statement=statement, topics=list(topics), **overrides)
+
+
+def goal(statement="Synthetic goal on 2026-09-13", topics=("cycling",), **overrides):
+    return MemoryData(kind="goal", statement=statement, topics=list(topics), **overrides)
 
 
 def record(client, data=None, text="Synthetic discomfort since Monday"):

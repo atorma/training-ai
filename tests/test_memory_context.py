@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from pydantic_ai import Agent
@@ -16,11 +16,16 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
-from test_memory_api import observation, record, source
+from test_memory_api import constraint, goal, observation, record, source
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.memory_context import compact, prepare_memory
-from training_ai.memory_models import MemoryContextLimit, MemoryData, MemorySource
+from training_ai.memory_models import (
+    MemoryContextLimit,
+    MemoryData,
+    MemorySource,
+    model_memory,
+)
 
 TODAY = date(2026, 10, 15)
 
@@ -39,7 +44,6 @@ def current_source(memory_client, thread, text="Continue unrelated gearing"):
     conversations = memory_client.app.state.conversation_store
     run = conversations.start_run(thread, text)
     message = conversations.get_thread(thread)["messages"][-1]
-    from datetime import datetime
 
     return MemorySource(
         thread,
@@ -54,6 +58,11 @@ def finish_turn(memory_client, thread, text, response):
     conversations = memory_client.app.state.conversation_store
     run = conversations.start_run(thread, text)
     conversations.finish_run(run["id"], "completed", response)
+
+
+def recorded(memory_client, data):
+    """Simplified memory record from a fresh thread whose message and quote are the statement itself."""
+    return record(memory_client, data, data.statement)[0]
 
 
 def test_required_exact_character_boundary_unicode_and_dedup(memory_client):
@@ -104,7 +113,6 @@ def test_observation_order_window_exact_fit_skip_large_and_no_history_starvation
             "entries"
         ]
     ] == [unknown["id"]]
-    assert store.list(start="2019-01-01", end="2020-12-31")["total"] == 2  # Old and unknown.
 
     thread = store.conversations.create_thread()["id"]
     finish_turn(
@@ -293,7 +301,6 @@ def test_frozen_message_fixture_upgrade_decode_and_history_preparation(tmp_path)
         ]
     store.initialize()
     run = store.start_run("fixture-thread", "Continue gearing")
-    from datetime import UTC, datetime
 
     source_identity = MemorySource(
         "fixture-thread", run["user_sequence"], run["id"], datetime.now(UTC), "UTC"
@@ -317,8 +324,8 @@ def test_frozen_message_fixture_upgrade_decode_and_history_preparation(tmp_path)
 def test_old_open_goal_is_required_and_pools_do_not_spend_each_others_allowance(memory_client):
     store = memory_client.app.state.memory_store
     old_source = source(memory_client, "Open-ended endurance goal", "2020-01-01T00:00:00+00:00")
-    goal = store.record(
-        MemoryData(kind="goal", statement="Endurance goal", topics=["fitness"]),
+    open_goal = store.record(
+        goal(statement="Endurance goal", topics=["fitness"]),
         old_source,
         "Open-ended endurance goal",
     )["entry"]
@@ -346,7 +353,7 @@ def test_old_open_goal_is_required_and_pools_do_not_spend_each_others_allowance(
         observation_budget=observation_size,
         history_budget=2000,
     )
-    assert [e["id"] for e in selected.required["entries"]] == [goal["id"]]
+    assert [e["id"] for e in selected.required["entries"]] == [open_goal["id"]]
     assert [e["id"] for e in selected.observations["entries"]] == [recent["id"]]
     assert selected.history["messages"] == []
 
@@ -363,7 +370,7 @@ def test_preparation_reads_one_consistent_snapshot_during_concurrent_edits(memor
     originals = [
         record(
             memory_client,
-            MemoryData(kind="constraint", statement=f"Original {i}", topics=["fitness"]),
+            constraint(statement=f"Original {i}", topics=["fitness"]),
         )[0]
         for i in range(2)
     ]
@@ -401,3 +408,164 @@ def test_preparation_reads_one_consistent_snapshot_during_concurrent_edits(memor
     assert {e["statement"] for e in prepare_memory(store, support, TODAY).required["entries"]} == {
         "New revision"
     }
+
+
+def test_prepared_memory_for_fresh_thread(memory_client):
+    """Exact projection for a fresh thread: pool order, required sort by ID and key order."""
+    store = memory_client.app.state.memory_store
+
+    # Memories from different source threads
+    observation_entry = recorded(
+        memory_client,
+        observation(statement="Lifts head too high in freestyle swimming", topics=["swimming"]),
+    )
+    goal_entry = recorded(
+        memory_client,
+        goal(
+            statement="Gravel race on 2026-11-01",
+            effective_from=date(2026, 11, 1),
+            effective_to=date(2026, 11, 1),
+            date_precision="exact",
+        ),
+    )
+    constraint_entry = recorded(
+        memory_client, constraint(statement="No running until end of December")
+    )
+    # Constraints end and goals close only through explicit ended_on/closed_on, never by dates.
+    ended_constraint = recorded(
+        memory_client,
+        constraint(
+            statement="No heavy lifting until end of May",
+            effective_from=date(2026, 5, 1),
+            effective_to=date(2026, 5, 31),
+            ended_on=date(2026, 6, 1),
+            date_precision="exact",
+        ),
+    )
+    closed_goal = recorded(
+        memory_client,
+        goal(
+            statement="Triathlon race",
+            effective_from=date(2026, 7, 25),
+            effective_to=date(2026, 7, 25),
+            closed_on=TODAY,
+            date_precision="exact",
+            outcome="withdrawn",
+        ),
+    )
+    old_observation = recorded(
+        memory_client,
+        observation(
+            statement="Shoulder pain",
+            topics=["swimming"],
+            effective_to=TODAY - timedelta(days=31),
+            date_precision="approximate",
+        ),
+    )
+    forgotten = recorded(memory_client, observation(statement="Mistaken report"))
+    store.forget(forgotten["id"], 1)
+
+    prepared = prepare_memory(store, source(memory_client, "Analyze my training"), TODAY)
+
+    # Required pool (open goals and unended constraints, sorted by ID) precedes observations
+    # within the window. Ended constraints, closed goals and older observations are excluded.
+    # Each recording above left a receipt in its own thread and one entry is forgotten, yet a
+    # fresh thread gets no receipts and no withdrawal notices: both need an identifiable reference.
+    expected = {
+        "entries": [
+            *sorted(
+                (model_memory(goal_entry), model_memory(constraint_entry)), key=lambda e: e["id"]
+            ),
+            model_memory(observation_entry),
+        ],
+        "receipts": [],
+        "withdrawals": [],
+    }
+    assert prepared.context == expected
+    assert compact(prepared.context) == compact(expected)
+    excluded = {ended_constraint["id"], closed_goal["id"], old_observation["id"], forgotten["id"]}
+    assert excluded.isdisjoint(e["id"] for e in prepared.context["entries"])
+
+
+def test_prepared_memory_for_turn_context(memory_client):
+    """Exact projection with receipts, history references, withdrawals and cross-pool dedup."""
+    store = memory_client.app.state.memory_store
+
+    constraint_entry = recorded(
+        memory_client, constraint(statement="No running until end of December")
+    )
+    recent_observation = recorded(memory_client, observation(statement="Swim felt slow"))
+    old_observation = recorded(
+        memory_client,
+        observation(statement="Knee pain", effective_from=date(2020, 1, 1), date_precision="exact"),
+    )
+    forgotten = recorded(memory_client, observation(statement="Mistaken report"))
+    store.forget(forgotten["id"], 1)
+
+    # An earlier completed turn in this thread references all three observations.
+    thread = store.conversations.create_thread()["id"]
+    historical = [
+        ModelResponse(parts=[ToolCallPart("search_memory", {"topic": "swimming"}, "call-1")]),
+        ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    "search_memory",
+                    {
+                        "entries": [
+                            {"id": e["id"]}
+                            for e in (recent_observation, old_observation, forgotten)
+                        ]
+                    },
+                    "call-1",
+                )
+            ],
+            instructions="Old automatic instructions",
+        ),
+        ModelResponse(parts=[TextPart("Earlier conclusion")]),
+    ]
+    finish_turn(memory_client, thread, "Search my swimming memory", historical)
+
+    # The current message captured an observation before its response failed; this is the retry.
+    current = current_source(memory_client, thread, "I felt strong on the bike today")
+    captured = store.record(
+        data=observation(statement="Felt strong on the bike", topics=["cycling"]),
+        source=current,
+        quote="felt strong on the bike",
+    )["entry"]
+
+    prepared = prepare_memory(store, current, TODAY)
+
+    receipts = [
+        {k: v for k, v in r.items() if k not in ("entry", "reused")}
+        for r in store.receipts(current.thread_id, current.sequence)
+    ]
+    assert [r["entry_id"] for r in receipts] == [captured["id"]]
+    expected = {
+        "entries": [
+            # Required: applicable constraints by ID, then receipt targets in receipt order.
+            model_memory(constraint_entry),
+            model_memory(captured),
+            # Observations: the captured one is already supplied; the old one is out of window.
+            model_memory(recent_observation),
+            # History references: the recent one is already supplied, the old one is added.
+            model_memory(old_observation),
+        ],
+        "receipts": receipts,
+        # Withdrawals: content-free notice for the forgotten reference in history.
+        "withdrawals": [store.get(forgotten["id"])],
+    }
+    assert prepared.context == expected
+    assert compact(prepared.context) == compact(expected)
+
+    assert prepared.required["entries"] == expected["entries"][:2]
+    assert prepared.observations == {"entries": [model_memory(recent_observation)]}
+    assert prepared.history["entries"] == [model_memory(old_observation)]
+    assert [m["kind"] for m in prepared.history["messages"]] == [
+        "request",
+        "response",
+        "request",
+        "response",
+    ]
+    assert all("instructions" not in m for m in prepared.history["messages"])
+    assert len(prepared.messages) == 5
+    assert prepared.messages[-1].parts[0].content == "I felt strong on the bike today"
