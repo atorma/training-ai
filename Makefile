@@ -17,6 +17,8 @@ bootstrap:
 lint:
 	$(UV) run --locked ruff check .
 	$(UV) run --locked ruff format --check .
+	$(UV) run --locked mypy src/training_ai
+	$(UV) run --locked pyright src/training_ai
 	$(UV) run --locked prek run markdownlint-check --stage manual --all-files
 	$(NPM) run lint
 	$(NPM) exec tsc -- --noEmit -p tsconfig.json

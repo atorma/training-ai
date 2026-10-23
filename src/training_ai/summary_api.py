@@ -71,8 +71,13 @@ def _compute_date_range(days: int, timezone: str) -> DateRange:
     return DateRange(start=start_date.isoformat(), end=end_date.isoformat())
 
 
+class SummaryResult(Protocol):
+    @property
+    def output(self) -> str: ...
+
+
 class SummaryAgent(Protocol):
-    async def run(self, user_prompt: str, *, deps: Summary): ...
+    async def run(self, user_prompt: str, *, deps: Summary) -> SummaryResult: ...
 
 
 def _error_response(code: str, message: str, status_code: int) -> JSONResponse:

@@ -22,7 +22,8 @@ Use Make targets for development tasks.
 
 - `make bootstrap` - install locked dependencies, Git hooks, and Playwright Chromium
   (requires Make, uv, Node.js, and npm).
-- `make lint` - check Python and tracked Markdown without modifying source files.
+- `make lint` - check Python (Ruff, mypy, pyright) and tracked Markdown without modifying
+  source files.
 - `make lint-fix` - apply formatting and supported lint fixes.
 - `make hooks` - run pre-commit hooks on tracked and untracked, nonignored files.
 - `make render-k8s` - render application manifests locally without accessing a cluster.

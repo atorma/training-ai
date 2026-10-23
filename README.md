@@ -60,7 +60,7 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 | `make build-web` | Compile frontend assets. |
 | `make build` | Build frontend assets and Python packages in `dist/`. |
 | `make build-docker` | Build frontend assets locally, then package the Docker image. |
-| `make lint` | Check Python, Markdown, frontend formatting, and TypeScript. |
+| `make lint` | Check Python (Ruff, mypy, pyright), Markdown, frontend formatting, and TypeScript. |
 | `make lint-fix` | Apply formatting and supported lint fixes. |
 | `make hooks` | Run pre-commit hooks, including new unstaged, nonignored files. |
 | `make test` | Run fast Python tests. |
