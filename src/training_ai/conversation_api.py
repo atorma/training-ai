@@ -23,6 +23,7 @@ from training_ai.conversation_store import (
     ThreadDetail,
 )
 from training_ai.memory_api import memory_routes
+from training_ai.memory_context import compact
 from training_ai.memory_models import (
     MemoryContextLimit,
     MemoryLimits,
@@ -70,7 +71,7 @@ def create_conversation_app(
                 run["thread_id"], run["user_sequence"], run["id"], timestamp, timezone
             )
             prepared = prepare_turn(memory, source, datetime.now(zone).date(), limits)
-            deps = MemoryDeps(memory, source, prepared.context)
+            deps = MemoryDeps(memory, source, compact(prepared.context))
             async with agent.run_stream_events(
                 message_history=prepared.messages,
                 deps=deps,

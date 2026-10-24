@@ -4,7 +4,6 @@ import asyncio
 import os
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
 
 import pytest
 from pydantic_ai import Agent
@@ -39,7 +38,7 @@ class ReadingDeps:
     """Any deps with a store and a context satisfy MemoryReading; no source is needed."""
 
     store: MemoryStore
-    memory_context: dict[str, Any]
+    memory_context: str
 
 
 def test_reading_only_agent_gets_read_tools_and_context_without_a_turn(memory_client):
@@ -56,7 +55,7 @@ def test_reading_only_agent_gets_read_tools_and_context_without_a_turn(memory_cl
     agent = Agent(FunctionModel(respond), deps_type=ReadingDeps)
     add_memory_reading(agent)
     context = read_memory_context(store, date.today()).context
-    result = asyncio.run(agent.run("Summarize", deps=ReadingDeps(store, context)))
+    result = asyncio.run(agent.run("Summarize", deps=ReadingDeps(store, compact(context))))
 
     instructions, tools = requests[0]
     assert tools == ["get_memory", "search_memory"]

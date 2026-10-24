@@ -9,7 +9,6 @@ from pydantic import Field
 from pydantic_ai import Agent, ModelRetry, RunContext
 from typing_extensions import Annotated
 
-from training_ai.memory_context import compact
 from training_ai.memory_models import (
     AmbiguousEvidence,
     MemoryConflict,
@@ -109,7 +108,9 @@ class MemoryReading(Protocol):
     def store(self) -> MemoryStore: ...
 
     @property
-    def memory_context(self) -> Mapping[str, Any]: ...
+    def memory_context(self) -> str:
+        """Compact JSON, serialized once per preparation rather than per model request."""
+        ...
 
 
 class MemoryWriting(MemoryReading, Protocol):
@@ -125,12 +126,12 @@ class MemoryDeps:
 
     store: MemoryStore
     source: MemorySource
-    memory_context: Mapping[str, Any]
+    memory_context: str
 
 
-def _context_block(memory_context: Mapping[str, Any]) -> str:
+def _context_block(memory_context: str) -> str:
     # Last in its instruction block so the JSON ends the text.
-    return "\nCONTEXT (JSON data): " + compact(memory_context)
+    return "\nCONTEXT (JSON data): " + memory_context
 
 
 def _source_block(source: MemorySource) -> str:
@@ -142,7 +143,7 @@ def _source_block(source: MemorySource) -> str:
     )
 
 
-def read_instructions(memory_context: Mapping[str, Any]) -> str:
+def read_instructions(memory_context: str) -> str:
     return MEMORY_READ_INSTRUCTIONS + "\n## Memory context" + _context_block(memory_context)
 
 
