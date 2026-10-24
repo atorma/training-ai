@@ -26,16 +26,15 @@ class Config:
     memory_context_budget: int = 12000
     memory_observation_budget: int = 4000
     conversation_history_budget: int = 64000
+    database_path: str | Path = "data/conversations.sqlite3"
 
     def memory_limits(self) -> MemoryLimits:
         return MemoryLimits(
-            self.memory_observation_days,
-            self.memory_context_budget,
-            self.memory_observation_budget,
-            self.conversation_history_budget,
+            observation_days=self.memory_observation_days,
+            required_budget=self.memory_context_budget,
+            observation_budget=self.memory_observation_budget,
+            history_budget=self.conversation_history_budget,
         )
-
-    database_path: str | Path = "data/conversations.sqlite3"
 
     def mcp_headers(self) -> dict[str, str] | None:
         return _basic_auth_header(self.mcp_basic_auth_username, self.mcp_basic_auth_password)

@@ -1,6 +1,7 @@
 import pytest
 
 from training_ai import config
+from training_ai.memory_models import MemoryLimits
 
 
 def configure_environment(monkeypatch):
@@ -71,4 +72,30 @@ def test_context_allowance_boundaries(monkeypatch, value):
         == loaded.memory_observation_budget
         == loaded.conversation_history_budget
         == int(value)
+    )
+
+
+def test_database_path_defaults_and_is_trimmed(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.delenv("DATABASE_PATH")  # Set for every test by conftest; drop it here.
+    assert config.load_config().database_path == "data/conversations.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", " /srv/training/chat.sqlite3 ")
+    assert config.load_config().database_path == "/srv/training/chat.sqlite3"
+
+
+def test_blank_database_path_fails_at_startup(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("DATABASE_PATH", "  ")
+    with pytest.raises(RuntimeError, match="Missing required environment variables: DATABASE_PATH"):
+        config.load_config()
+
+
+def test_memory_limits_map_each_allowance_to_its_own_field(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("MEMORY_OBSERVATION_DAYS", "7")
+    monkeypatch.setenv("MEMORY_CONTEXT_BUDGET", "2001")
+    monkeypatch.setenv("MEMORY_OBSERVATION_BUDGET", "2002")
+    monkeypatch.setenv("CONVERSATION_HISTORY_BUDGET", "2003")
+    assert config.load_config().memory_limits() == MemoryLimits(
+        observation_days=7, required_budget=2001, observation_budget=2002, history_budget=2003
     )
