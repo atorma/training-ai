@@ -29,7 +29,9 @@ def create_app(config: Config) -> Starlette:
     signal_sender = build_signal_sender(config)
     app.add_route(
         "/summary",
-        create_summary_handler(summary_agent, signal_sender),
+        create_summary_handler(
+            summary_agent, signal_sender, app.state.memory_store, config.memory_limits()
+        ),
         methods=["POST"],
         name="Training Summary",
     )

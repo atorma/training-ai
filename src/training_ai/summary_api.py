@@ -18,8 +18,11 @@ from starlette.status import (
     HTTP_503_SERVICE_UNAVAILABLE,
 )
 
+from training_ai.memory_context import compact, read_memory_context
+from training_ai.memory_models import MemoryContextLimit, MemoryLimits
+from training_ai.memory_store import MemoryStore
 from training_ai.signal_sender import SignalSender, SignalSendError
-from training_ai.summary_agent import Summary
+from training_ai.summary_agent import SummaryDeps
 
 DEFAULT_USER_MESSAGE = "Summarize my activity and fitness development."
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +80,7 @@ class SummaryResult(Protocol):
 
 
 class SummaryAgent(Protocol):
-    async def run(self, user_prompt: str, *, deps: Summary) -> SummaryResult: ...
+    async def run(self, user_prompt: str, *, deps: SummaryDeps) -> SummaryResult: ...
 
 
 def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
@@ -106,7 +109,10 @@ def _validate_summary_request(payload: dict, request_id: str) -> SummaryRequest 
         )
 
 
-def _build_summary_deps(summary_request: SummaryRequest) -> tuple[DateRange, DateRange, Summary]:
+def _build_summary_deps(
+    summary_request: SummaryRequest, memory: MemoryStore, limits: MemoryLimits
+) -> tuple[DateRange, DateRange, SummaryDeps]:
+    """Date ranges and the shared memory context, both as of today in the request timezone."""
     activity_range = _compute_date_range(
         summary_request.activity_days,
         summary_request.timezone,
@@ -115,12 +121,16 @@ def _build_summary_deps(summary_request: SummaryRequest) -> tuple[DateRange, Dat
         summary_request.fitness_days,
         summary_request.timezone,
     )
+    today = datetime.now(ZoneInfo(summary_request.timezone)).date()
+    context = read_memory_context(memory, today, limits)
 
-    deps = Summary(
+    deps = SummaryDeps(
         activity_start_date=activity_range.start,
         activity_end_date=activity_range.end,
         fitness_start_date=fitness_range.start,
         fitness_end_date=fitness_range.end,
+        store=memory,
+        memory_context=compact(context.context),
     )
 
     return activity_range, fitness_range, deps
@@ -128,7 +138,7 @@ def _build_summary_deps(summary_request: SummaryRequest) -> tuple[DateRange, Dat
 
 async def _generate_summary(
     agent: SummaryAgent,
-    deps: Summary,
+    deps: SummaryDeps,
     request_id: str,
 ) -> tuple[str | None, JSONResponse | None]:
     summary_start = time.monotonic()
@@ -184,8 +194,12 @@ async def _send_signal(
 
 def create_summary_handler(
     agent: SummaryAgent,
-    signal_sender: SignalSender | None = None,
+    signal_sender: SignalSender | None,
+    memory: MemoryStore,
+    limits: MemoryLimits | None = None,
 ):
+    limits = limits or MemoryLimits()
+
     async def summary_handler(request: Request) -> JSONResponse:
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         with logfire.span("activity_summary"):
@@ -197,7 +211,15 @@ def create_summary_handler(
             if isinstance(summary_request, JSONResponse):
                 return summary_request
 
-            activity_range, fitness_range, deps = _build_summary_deps(summary_request)
+            try:
+                activity_range, fitness_range, deps = _build_summary_deps(
+                    summary_request, memory, limits
+                )
+            except MemoryContextLimit as exc:
+                # Safe text: the configured allowance and generic guidance, no memory contents.
+                LOGGER.warning("summary.context_limit request_id=%s error=%s", request_id, exc)
+                logfire.warning("summary.context_limit")
+                return _error_response("summary_error", str(exc), HTTP_503_SERVICE_UNAVAILABLE)
 
             LOGGER.info(
                 "summary.requested request_id=%s activity_range=%s..%s fitness_range=%s..%s",

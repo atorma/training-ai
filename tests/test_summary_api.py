@@ -10,11 +10,13 @@ from pydantic_ai import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 from starlette.requests import Request
 from starlette.testclient import TestClient
+from test_memory_api import constraint, goal, observation, recorded
 
 from training_ai import summary_api
 from training_ai.app import create_app
 from training_ai.config import Config
-from training_ai.memory_models import MemoryData, MemorySource
+from training_ai.conversation_store import ConversationStore
+from training_ai.memory_store import MemoryStore
 from training_ai.signal_sender import SignalSendError, SignalSendResult
 
 
@@ -72,6 +74,40 @@ def set_up(monkeypatch):
     monkeypatch.setattr(summary_api, "datetime", FixedDateTime)
 
 
+@pytest.fixture
+def memory(tmp_path):
+    """A real, empty memory store: the handler always reads shared memory."""
+    conversations = ConversationStore(tmp_path / "summary.sqlite3")
+    conversations.initialize()
+    return MemoryStore(conversations)
+
+
+@pytest.fixture
+def app_client(tmp_path):
+    config = Config(
+        model="test",
+        mcp_server_url="http://unused.invalid/mcp",
+        mcp_basic_auth_username=None,
+        mcp_basic_auth_password=None,
+        signal_api_url=None,
+        signal_number=None,
+        signal_basic_auth_username=None,
+        signal_basic_auth_password=None,
+        memory_context_budget=2000,
+        database_path=tmp_path / "chat.sqlite3",
+    )
+    with TestClient(create_app(config)) as client:  # Startup initializes the stores.
+        yield client
+
+
+SUMMARY_REQUEST = {
+    "send_signal": False,
+    "activity_days": 1,
+    "fitness_days": 7,
+    "timezone": "Europe/London",
+}
+
+
 def test_compute_date_range_uses_yesterday():
     one_day = summary_api._compute_date_range(1, "Europe/London")
     assert one_day.start == "2025-03-09"
@@ -116,9 +152,9 @@ def test_summary_request_enforces_ranges():
         )
 
 
-def test_summary_handler_returns_ranges(monkeypatch):
+def test_summary_handler_returns_ranges(memory):
     agent = StubAgent("stub summary")
-    handler = summary_api.create_summary_handler(agent)
+    handler = summary_api.create_summary_handler(agent, None, memory)
     payload = {
         "activity_days": 1,
         "fitness_days": 7,
@@ -139,10 +175,12 @@ def test_summary_handler_returns_ranges(monkeypatch):
     assert agent.last_deps.activity_end_date == "2025-03-09"
     assert agent.last_deps.fitness_start_date == "2025-03-03"
     assert agent.last_deps.fitness_end_date == "2025-03-09"
+    assert agent.last_deps.store is memory
+    assert agent.last_deps.memory_context == '{"entries":[]}'
 
 
-def test_summary_handler_rejects_invalid_json():
-    handler = summary_api.create_summary_handler(StubAgent("stub summary"))
+def test_summary_handler_rejects_invalid_json(memory):
+    handler = summary_api.create_summary_handler(StubAgent("stub summary"), None, memory)
     request = make_request(b"not json")
 
     response = asyncio.run(handler(request))
@@ -151,10 +189,10 @@ def test_summary_handler_rejects_invalid_json():
     assert body["code"] == "validation_error"
 
 
-def test_summary_handler_sends_signal():
+def test_summary_handler_sends_signal(memory):
     agent = StubAgent("stub summary")
     sender = StubSignalSender(timestamp="abc123")
-    handler = summary_api.create_summary_handler(agent, sender)
+    handler = summary_api.create_summary_handler(agent, sender, memory)
     payload = {
         "activity_days": 1,
         "fitness_days": 7,
@@ -171,9 +209,9 @@ def test_summary_handler_sends_signal():
     assert sender.last_message == "stub summary"
 
 
-def test_summary_handler_rejects_signal_without_sender():
+def test_summary_handler_rejects_signal_without_sender(memory):
     agent = StubAgent("stub summary")
-    handler = summary_api.create_summary_handler(agent)
+    handler = summary_api.create_summary_handler(agent, None, memory)
     payload = {
         "activity_days": 1,
         "fitness_days": 7,
@@ -189,10 +227,10 @@ def test_summary_handler_rejects_signal_without_sender():
     assert agent.last_message is None
 
 
-def test_summary_handler_rejects_signal_failure():
+def test_summary_handler_rejects_signal_failure(memory):
     agent = StubAgent("stub summary")
     sender = StubSignalSender(error=SignalSendError("nope"))
-    handler = summary_api.create_summary_handler(agent, sender)
+    handler = summary_api.create_summary_handler(agent, sender, memory)
     payload = {
         "activity_days": 1,
         "fitness_days": 7,
@@ -207,63 +245,52 @@ def test_summary_handler_rejects_signal_failure():
     assert body["code"] == "signal_error"
 
 
-@pytest.mark.xfail(strict=True)
-def test_summary_api_uses_memories(tmp_path, monkeypatch):
-    config = Config(
-        model="test",
-        mcp_server_url="http://unused.invalid/mcp",
-        mcp_basic_auth_username=None,
-        mcp_basic_auth_password=None,
-        signal_api_url=None,
-        signal_number=None,
-        signal_basic_auth_username=None,
-        signal_basic_auth_password=None,
-        database_path=tmp_path / "chat.sqlite3",
+def test_summary_api_uses_memories(app_client):
+    """The summary agent reads shared memory: current context in instructions, read tools only."""
+    client = app_client
+    seen = recorded(client, observation(statement="Some memory"))
+    open_goal = recorded(client, goal(statement="Gravel race in spring"))
+    closed_goal = recorded(
+        client, goal(statement="Triathlon", closed_on="2026-10-01", outcome="withdrawn")
     )
-
     model_requests = []
 
     def respond(messages, info):
-        model_requests.append((messages, info.instructions))
-        return ModelResponse(
-            parts=[TextPart(content="Some response")],
-            provider_details=None,
-            provider_response_id=None,
-        )
+        model_requests.append((info.instructions, sorted(t.name for t in info.function_tools)))
+        return ModelResponse(parts=[TextPart(content="Some response")])
 
-    app = create_app(config)
-    # TestClient initializes conversation store
-    with TestClient(app) as client:
-        # Required evidence for synthetic memory
-        conversation_store = app.state.conversation_store
-        thread = conversation_store.create_thread()
-        run = conversation_store.start_run(thread["id"], "Some message")
-        prompt = conversation_store.get_thread(thread["id"])["messages"][0]["payload"]["parts"][0]
-        conversation_store.finish_run(run["id"], "completed")
-        memory_source = MemorySource(
-            thread_id=thread["id"],
-            sequence=1,
-            run_id=run["id"],
-            timestamp=real_datetime.fromisoformat(prompt["timestamp"]),
-            timezone="Europe/London",
-        )
-        memory_data = MemoryData(kind="observation", statement="Some memory", topics=["topic"])
+    agent = client.app.state.summary_agent
+    with agent.override(model=FunctionModel(function=respond), toolsets=[]):
+        response = client.post("/summary", json=SUMMARY_REQUEST)
 
-        app.state.memory_store.record(data=memory_data, source=memory_source, quote="message")
+    assert response.status_code == 200
+    assert response.json()["summary"] == "Some response"
+    [(instructions, tools)] = model_requests
+    assert tools == ["get_memory", "search_memory"]  # No record/change/forget for a summary.
+    assert "Use activity data from date 2025-03-09 to 2025-03-09." in instructions
+    context = json.loads(instructions.split("CONTEXT (JSON data): ", 1)[1])
+    assert {e["id"] for e in context["entries"]} == {seen["id"], open_goal["id"]}
+    assert "Some memory" in instructions
+    assert "Gravel race in spring" in instructions
+    assert closed_goal["id"] not in instructions
+    assert "SOURCE_DATE" not in instructions
 
-        agent = app.state.summary_agent
-        with agent.override(model=FunctionModel(function=respond), toolsets=[]):
-            response = client.post(
-                "/summary",
-                json={
-                    "send_signal": False,
-                    "activity_days": 1,
-                    "fitness_days": 7,
-                    "timezone": "Europe/London",
-                },
-            )
 
-            assert response.status_code == 200
-            assert len(model_requests) == 1
-            _, instructions = model_requests[0]
-            assert "Some memory" in instructions
+def test_summary_api_reports_required_memory_overflow(app_client):
+    client = app_client
+    recorded(client, constraint(statement="x" * 1200))
+    recorded(client, constraint(statement="y" * 1200))
+
+    def respond(messages, info):
+        raise AssertionError("The model must not run when required memory overflows.")
+
+    agent = client.app.state.summary_agent
+    with agent.override(model=FunctionModel(function=respond), toolsets=[]):
+        response = client.post("/summary", json=SUMMARY_REQUEST)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "summary_error",
+        "message": "Required memory exceeds MEMORY_CONTEXT_BUDGET (2000 characters). "
+        "Manage shared memory or increase the configured allowance.",
+    }

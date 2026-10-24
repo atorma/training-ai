@@ -7,6 +7,8 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
 
 from training_ai.config import Config
+from training_ai.memory_store import MemoryStore
+from training_ai.memory_tools import add_memory_reading
 
 DEFAULT_BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
@@ -22,21 +24,29 @@ class Summary:
     fitness_end_date: str
 
 
-def create_summary_agent(config: Config) -> Agent[Summary, str]:
+@dataclass(frozen=True)
+class SummaryDeps(Summary):
+    """Date ranges plus read-only shared memory: the store and its compact JSON context."""
+
+    store: MemoryStore
+    memory_context: str
+
+
+def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
     mcp_server = MCPToolset(
         config.mcp_server_url,
         headers=config.mcp_headers(),
     )
     base_instructions = os.getenv("BASE_INSTRUCTIONS", DEFAULT_BASE_INSTRUCTIONS)
-    agent = Agent[Summary, str](
+    agent = Agent[SummaryDeps, str](
         config.model,
-        deps_type=Summary,
+        deps_type=SummaryDeps,
         instructions=base_instructions,
         toolsets=[mcp_server],
     )
 
     @agent.instructions
-    def date_range_instructions(ctx: RunContext[Summary]) -> str:
+    def date_range_instructions(ctx: RunContext[SummaryDeps]) -> str:
         return (
             "Use activity data from date "
             f"{ctx.deps.activity_start_date} to {ctx.deps.activity_end_date}. "
@@ -44,4 +54,6 @@ def create_summary_agent(config: Config) -> Agent[Summary, str]:
             f"{ctx.deps.fitness_start_date} to {ctx.deps.fitness_end_date}."
         )
 
+    # Registered last so the memory context JSON ends the instructions, as in the chat agent.
+    add_memory_reading(agent)
     return agent
