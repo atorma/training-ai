@@ -138,6 +138,15 @@ class MemoryStore:
             ).fetchall()
         ]
 
+    def _forgotten_entries(self, db) -> builtins.list[ForgottenMemory]:
+        """Content-free notices for every forgotten ID, so context preparation needs no lookups."""
+        return [
+            {"id": row["id"], "status": "forgotten", "forgotten_at": row["forgotten_at"]}
+            for row in db.execute(
+                "SELECT id, forgotten_at FROM memory_entries WHERE forgotten_at IS NOT NULL"
+            ).fetchall()
+        ]
+
     def list(
         self, *, topic="", kind="", status="", start=None, end=None, offset=0, limit=30
     ) -> MemoryPage:

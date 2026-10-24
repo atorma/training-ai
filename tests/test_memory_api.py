@@ -11,7 +11,7 @@ from starlette.testclient import TestClient
 from training_ai.conversation_api import create_conversation_app
 from training_ai.conversation_context import prepare_turn
 from training_ai.memory_models import AmbiguousEvidence, MemoryConflict, MemoryData, MemorySource
-from training_ai.memory_tools import MemoryDeps
+from training_ai.memory_tools import write_instructions
 
 
 @pytest.fixture
@@ -174,7 +174,7 @@ def test_thread_deletion_retains_memory_without_dangling_source_links(client):
 
 def test_relative_source_clock_is_stable_on_retry(client):
     support = source(client, "Yesterday was tiring", "2026-12-31T23:30:00+00:00")
-    instructions = MemoryDeps(client.app.state.memory_store, support).instructions()
+    instructions = write_instructions(support)
     assert "SOURCE_DATE: 2027-01-01T01:30:00+02:00" in instructions
     assert "SOURCE_TIMEZONE: Europe/Helsinki" in instructions
 

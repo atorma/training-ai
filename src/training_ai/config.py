@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
+from training_ai.memory_models import MemoryLimits
+
 
 @dataclass(frozen=True)
 class Config:
@@ -24,6 +26,15 @@ class Config:
     memory_context_budget: int = 12000
     memory_observation_budget: int = 4000
     conversation_history_budget: int = 64000
+
+    def memory_limits(self) -> MemoryLimits:
+        return MemoryLimits(
+            self.memory_observation_days,
+            self.memory_context_budget,
+            self.memory_observation_budget,
+            self.conversation_history_budget,
+        )
+
     database_path: str | Path = "data/conversations.sqlite3"
 
     def mcp_headers(self) -> dict[str, str] | None:

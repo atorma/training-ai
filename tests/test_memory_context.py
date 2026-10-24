@@ -2,6 +2,7 @@
 
 import os
 from datetime import date, timedelta
+from uuid import UUID
 
 import pytest
 from pydantic_ai import Agent
@@ -11,7 +12,7 @@ from test_memory_api import constraint, goal, observation, record, recorded, sou
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.conversation_context import prepare_turn
-from training_ai.memory_context import compact, read_memory_context
+from training_ai.memory_context import compact, open_snapshot, read_memory_context
 from training_ai.memory_models import MemoryContextLimit, MemoryLimits, model_memory
 
 TODAY = date(2026, 10, 15)
@@ -97,3 +98,23 @@ def test_read_memory_context_applies_required_and_observation_budgets(memory_cli
     assert starved.required == context.required
     assert starved.observations.entries == []
     assert starved.context == {"entries": context.required.entries}
+
+
+def test_snapshot_resolves_live_forgotten_and_unknown_ids_without_lookups(memory_client):
+    """One load per snapshot: live facts, forgotten notices and unknown IDs are all lookups."""
+    store = memory_client.app.state.memory_store
+    live = recorded(memory_client, observation(statement="Swim felt slow"))
+    forgotten = recorded(memory_client, observation(statement="Mistaken report"))
+    store.forget(forgotten["id"], 1)
+    with open_snapshot(store, TODAY) as snapshot:
+        assert [e["id"] for e in snapshot.entries()] == [live["id"]]
+        assert snapshot.resolve(live["id"]) == model_memory(live)
+        assert snapshot.resolve(forgotten["id"]) == {
+            "id": forgotten["id"],
+            "status": "forgotten",
+            "forgotten_at": store.get(forgotten["id"])["forgotten_at"],
+        }
+        assert snapshot.resolve(str(UUID(int=0))) is None
+        # The snapshot does not query the database again, so a later forget is invisible to it.
+        store.forget(live["id"], 1)
+        assert snapshot.resolve(live["id"]) == model_memory(live)

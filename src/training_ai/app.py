@@ -19,13 +19,7 @@ def create_app(config: Config) -> Starlette:
 
     conversation_agent = create_agent(config)
     app = create_conversation_app(
-        conversation_agent,
-        config.database_path,
-        config.timezone,
-        config.memory_observation_days,
-        config.memory_context_budget,
-        config.memory_observation_budget,
-        config.conversation_history_budget,
+        conversation_agent, config.database_path, config.timezone, config.memory_limits()
     )
     app.state.conversation_agent = conversation_agent
 

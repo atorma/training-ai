@@ -13,7 +13,6 @@ from training_ai.memory_models import (
     MemoryContextLimit,
     MemoryEntry,
     MemoryLimits,
-    MissingMemory,
     ModelMemory,
     model_memory,
 )
@@ -25,37 +24,24 @@ def compact(value: Any) -> str:
 
 
 class MemorySnapshot:
-    """One read transaction. Resolution is pure and cached; dedup bookkeeping lives elsewhere."""
+    """One read transaction, loaded once. Resolution is a pure lookup; dedup lives elsewhere."""
 
     def __init__(self, store: MemoryStore, db: sqlite3.Connection, today: date):
         self.store, self.db, self.today = store, db, today
-        self._entries: list[MemoryEntry] | None = None
-        self._resolved: dict[str, ModelMemory | ForgottenMemory | None] = {}
+        self._entries: list[MemoryEntry] = store._entries(db, today.isoformat())
+        self._resolved: dict[str, ModelMemory | ForgottenMemory] = {
+            entry["id"]: model_memory(entry) for entry in self._entries
+        }
+        for notice in store._forgotten_entries(db):
+            self._resolved[notice["id"]] = notice
 
     def entries(self) -> list[MemoryEntry]:
-        """Every live entry, loaded once; seeds the resolution cache."""
-        if self._entries is None:
-            self._entries = self.store._entries(self.db, self.today.isoformat())
-            for entry in self._entries:
-                self._resolved.setdefault(entry["id"], model_memory(entry))
+        """Every live entry."""
         return self._entries
 
     def resolve(self, entry_id: str) -> ModelMemory | ForgottenMemory | None:
         """Current facts, a content-free withdrawal notice, or None for an unknown ID."""
-        if entry_id not in self._resolved:
-            try:
-                forgotten = self.store._forgotten_entry(self.db, entry_id)
-            except MissingMemory:
-                self._resolved[entry_id] = None  # Unknown IDs do not establish withdrawal.
-            else:
-                self._resolved[entry_id] = (
-                    forgotten
-                    if forgotten is not None
-                    else model_memory(
-                        self.store._live_entry(self.db, entry_id, self.today.isoformat())
-                    )
-                )
-        return self._resolved[entry_id]
+        return self._resolved.get(entry_id)  # Unknown IDs do not establish withdrawal.
 
 
 @contextmanager

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.ui.vercel_ai import VercelAIEventStream
@@ -13,6 +14,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
+from training_ai.conversation_context import prepare_turn
 from training_ai.conversation_events import SSE_HEADERS, ConversationEvents, RunStream
 from training_ai.conversation_store import (
     ConversationStore,
@@ -21,7 +23,12 @@ from training_ai.conversation_store import (
     ThreadDetail,
 )
 from training_ai.memory_api import memory_routes
-from training_ai.memory_models import MemoryContextLimit, MemorySource, ThreadMemoryReceipt
+from training_ai.memory_models import (
+    MemoryContextLimit,
+    MemoryLimits,
+    MemorySource,
+    ThreadMemoryReceipt,
+)
 from training_ai.memory_store import MemoryStore
 from training_ai.memory_tools import MemoryDeps
 
@@ -37,12 +44,11 @@ def create_conversation_app(
     agent,
     database_path,
     timezone="UTC",
-    observation_days=30,
-    memory_context_budget=12000,
-    memory_observation_budget=4000,
-    conversation_history_budget=64000,
+    limits: MemoryLimits | None = None,
 ):
     store = ConversationStore(database_path)
+    limits = limits or MemoryLimits()
+    zone = ZoneInfo(timezone)
     tasks = set()
     events = ConversationEvents()
     event_loop: asyncio.AbstractEventLoop | None = None
@@ -63,15 +69,8 @@ def create_conversation_app(
             source = MemorySource(
                 run["thread_id"], run["user_sequence"], run["id"], timestamp, timezone
             )
-            deps = MemoryDeps(
-                memory,
-                source,
-                observation_days,
-                memory_context_budget,
-                memory_observation_budget,
-                conversation_history_budget,
-            )
-            prepared = deps.prepare()
+            prepared = prepare_turn(memory, source, datetime.now(zone).date(), limits)
+            deps = MemoryDeps(memory, source, prepared.context)
             async with agent.run_stream_events(
                 message_history=prepared.messages,
                 deps=deps,

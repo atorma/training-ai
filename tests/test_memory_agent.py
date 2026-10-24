@@ -11,6 +11,7 @@ from starlette.testclient import TestClient
 from test_conversation_api import create_thread, wait_for_status
 
 from training_ai.conversation_api import create_conversation_app
+from training_ai.memory_models import MemoryLimits
 from training_ai.memory_tools import configure_memory_agent
 
 
@@ -260,7 +261,9 @@ def test_required_overflow_fails_before_provider_use(tmp_path, future_ending):
 
     with TestClient(
         create_conversation_app(
-            synthetic_agent(respond), tmp_path / "overflow.sqlite3", memory_context_budget=1
+            synthetic_agent(respond),
+            tmp_path / "overflow.sqlite3",
+            limits=MemoryLimits(required_budget=1),
         )
     ) as client:
         entry, _ = record(
@@ -586,7 +589,7 @@ def test_required_overflow_can_be_resolved_in_memory_then_retried(tmp_path):
         create_conversation_app(
             synthetic_agent(respond),
             tmp_path / "overflow-retry.sqlite3",
-            memory_context_budget=1200,
+            limits=MemoryLimits(required_budget=1200),
         )
     ) as client:
         entry, _ = record(client, MemoryData(kind="goal", statement="x" * 1500, topics=["fitness"]))
