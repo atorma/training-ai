@@ -16,7 +16,7 @@ flowchart TD
     Events --> Chat
     Training --> Provider[Model provider]
     Training --> MCP[External MCP server]
-    Training --> Memory[Memory tools / per-run context]
+    Training --> Memory[Memory tools / per-turn context]
     Web --> MemoryAPI[Memory management endpoints]
     MemoryAPI --> MemoryStore[MemoryStore]
     Memory --> MemoryStore
@@ -25,6 +25,8 @@ flowchart TD
     Summary --> SummaryAgent[Summary agent / PydanticAI]
     SummaryAgent --> Provider
     SummaryAgent --> MCP
+    SummaryAgent --> MemoryRead[Memory read tools / memory context]
+    MemoryRead --> MemoryStore
     Summary -->|Optional delivery| Signal[Signal API]
 ```
 
@@ -40,13 +42,14 @@ flowchart TD
 | Live events | Replay active runs, notify connected browsers, send heartbeat comments | [conversation_events.py](../src/training_ai/conversation_events.py) |
 | Training agent | Model instructions and tools from the external MCP server | [training_agent.py](../src/training_ai/training_agent.py) |
 | Shared memory | Validated observations/goals/constraints, versioned commands, source links and receipts | [memory_models.py](../src/training_ai/memory_models.py), [memory_store.py](../src/training_ai/memory_store.py) |
-| Memory agent integration | Per-run dependencies, sequential memory tools and fixed turn instructions | [memory_tools.py](../src/training_ai/memory_tools.py) |
-| Memory context | Atomic turn selection, independent budgets and current reference resolution | [memory_context.py](../src/training_ai/memory_context.py) |
+| Memory agent integration | Read tools and instructions for any agent; write tools, turn instructions and deps for the conversation agent | [memory_tools.py](../src/training_ai/memory_tools.py) |
+| Memory context | Thread-independent selection from one snapshot: required memory and recent observations under their budgets | [memory_context.py](../src/training_ai/memory_context.py) |
+| Conversation context | Once-per-turn preparation: memory context plus retry receipts and bounded history with current revisions or withdrawal notices | [conversation_context.py](../src/training_ai/conversation_context.py) |
 | Memory management | HTTP inspection/edit/forget commands and responsive browser view | [memory_api.py](../src/training_ai/memory_api.py), [memory.tsx](../src/frontend/memory.tsx) |
 | Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
-| Summary path | Date-window validation, summary generation and optional Signal delivery | [summary_api.py](../src/training_ai/summary_api.py), [summary_agent.py](../src/training_ai/summary_agent.py), [signal_sender.py](../src/training_ai/signal_sender.py) |
+| Summary path | Date-window validation, read-only memory context, summary generation and optional Signal delivery | [summary_api.py](../src/training_ai/summary_api.py), [summary_agent.py](../src/training_ai/summary_agent.py), [signal_sender.py](../src/training_ai/signal_sender.py) |
 
 ## Build and serving
 
@@ -64,6 +67,17 @@ flowchart LR
     Assets -->|Served by Starlette| Browser[Browser]
     Assets --> Package[Python package / Docker image]
 ```
+
+- `make run-web`: build UI once, then start Uvicorn with reload on port **7932**, serving the
+  built assets as production does.
+- `make dev-web`: Vite dev server with hot module reload on port **5173**, proxying `/api` and
+  `/summary` to Uvicorn with reload on port 7932. Override the server port with `WEB_PORT`.
+- `make build-web`: build static UI assets; `make build`: also package Python and assets.
+- Node is build tooling. The application server is Python; no Assistant Cloud integration.
+- Local access has no application login. Deployment manifests apply Basic Auth at the ingress.
+- Optional Logfire instrumentation is configured by the application factory.
+- On narrow screens, navigation opens in a modal drawer; thread actions use a compact popover.
+- Uvicorn allows five seconds for graceful shutdown before cancelling open SSE connections.
 
 See [data model](data-model.md) and [frontend communication](frontend-backend.md).
 See [Kubernetes deployment](kubernetes-deployment.md) for storage, backups, and rollout recovery.

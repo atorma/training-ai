@@ -197,9 +197,10 @@ Migration 3 creates this undeployed replacement schema after conversation naming
 runner preserves original messages. Future deployed evolution must preserve every historical
 revision/topic/source/receipt through explicit forward migrations; there is no memory format tag.
 
-[Context preparation](../src/training_ai/memory_context.py) reads one consistent snapshot per
-turn: required constraints/open goals/retry context, separately bounded recent observations,
-then newest complete history with reference additions. Historical memory results are never
-rewritten. Unknown IDs do not prove withdrawal. See
-[shared training memory](shared-training-memory.md) for budgets, precedence, lifecycle and the
-preserved-history forgetting scope.
+[Memory context](../src/training_ai/memory_context.py) reads one consistent snapshot and
+selects required constraints and open goals plus separately bounded recent observations; any
+agent can use it. [Conversation context](../src/training_ai/conversation_context.py) adds the
+turn's retry receipts and the newest complete history with current revisions or withdrawal
+notices for referenced entries. Historical memory results are never rewritten. Unknown IDs do
+not prove withdrawal. See [shared training memory](shared-training-memory.md) for budgets,
+precedence, lifecycle and the preserved-history forgetting scope.
