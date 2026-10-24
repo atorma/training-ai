@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
+from uuid import UUID
 
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
@@ -70,13 +71,24 @@ class PreparedTurn:
         }
 
 
+def _memory_id(value: Any) -> bool:
+    """Memory IDs are canonical uuid4 strings; training-data identifiers differ in shape."""
+    if not isinstance(value, str):
+        return False
+    try:
+        return str(UUID(value)) == value
+    except ValueError:
+        return False
+
+
 def _structured_ids(payload: Payload) -> set[str]:
+    """Memory IDs under known keys in any tool exchange, whatever tool produced them."""
     ids: set[str] = set()
 
     def visit(value: Any) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
-                if key in ("id", "entry_id", "target_entry_id") and isinstance(child, str):
+                if key in ("id", "entry_id", "target_entry_id") and _memory_id(child):
                     ids.add(child)
                 else:
                     visit(child)
@@ -85,13 +97,7 @@ def _structured_ids(payload: Payload) -> set[str]:
                 visit(child)
 
     for part in payload["parts"]:
-        if part.get("tool_name") not in {
-            "search_memory",
-            "get_memory",
-            "record_memory",
-            "change_memory",
-            "forget_memory",
-        }:
+        if part["part_kind"] not in ("tool-call", "tool-return", "retry-prompt"):
             continue
         value = part.get("args") if part["part_kind"] == "tool-call" else part.get("content")
         if isinstance(value, str):

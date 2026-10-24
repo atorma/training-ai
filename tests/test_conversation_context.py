@@ -4,6 +4,7 @@ import json
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from pydantic_ai import Agent
@@ -263,6 +264,55 @@ def test_unknown_structured_id_is_not_withdrawal_and_incomplete_tools_are_omitte
     assert prepared.history.withdrawals == []
     assert "Unknown memory" in compact(prepared.history.payload())
     assert "orphan" not in compact(prepared.history.payload())
+
+
+def test_history_references_are_found_by_id_shape_not_tool_name(memory_client):
+    store = memory_client.app.state.memory_store
+    # Old reports reach the context only through history references.
+    old = {"effective_from": date(2020, 1, 1), "date_precision": "exact"}
+    referenced = recorded(memory_client, observation(statement="Referenced by a data tool", **old))
+    unreferenced = recorded(memory_client, observation(statement="Named by a non-ID value", **old))
+    stray = str(uuid4())
+    thread = store.conversations.create_thread()["id"]
+    finish_turn(
+        memory_client,
+        thread,
+        "Mixed tool results",
+        [
+            ModelResponse(parts=[ToolCallPart("list_activities", {"days": 7}, "c1")]),
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        "list_activities",
+                        # A training-data tool: integer IDs, one memory UUID, one stray UUID.
+                        {"activities": [{"id": 12345}, {"id": referenced["id"]}, {"id": stray}]},
+                        "c1",
+                    )
+                ]
+            ),
+            ModelResponse(parts=[ToolCallPart("get_memory", {"entry_id": "not-a-uuid"}, "c2")]),
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        "get_memory",
+                        {"status": "not_found", "note": unreferenced["statement"]},
+                        "c2",
+                    )
+                ]
+            ),
+            ModelResponse(parts=[TextPart("Done")]),
+        ],
+    )
+    current = current_source(memory_client, thread)
+    prepared = prepare_turn(store, current, TODAY)
+    # The data tool's UUID is resolved; the stray UUID and non-UUID values establish nothing.
+    assert [e["id"] for e in prepared.history.entries] == [referenced["id"]]
+    assert prepared.history.withdrawals == []
+    assert unreferenced["id"] not in compact(prepared.context)
+    store.forget(referenced["id"], 1)
+    withdrawn = prepare_turn(store, current, TODAY)
+    assert [w["id"] for w in withdrawn.history.withdrawals] == [referenced["id"]]
+    assert unreferenced["id"] not in compact(withdrawn.context)
 
 
 def test_frozen_message_fixture_decodes_and_prepares_as_history(memory_client):
