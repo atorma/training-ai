@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from training_ai.conversation_api import create_conversation_app
-from training_ai.memory_tools import configure_memory_agent
+from training_ai.memory_tools import add_conversation_memory
 
 models.ALLOW_MODEL_REQUESTS = False
 failed_prompts = set()
@@ -68,7 +68,7 @@ async def respond(messages, info):
 
 
 agent = Agent(FunctionModel(stream_function=respond))
-configure_memory_agent(agent)
+add_conversation_memory(agent)
 app = create_conversation_app(agent, os.environ["DATABASE_PATH"])
 
 

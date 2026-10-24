@@ -31,7 +31,7 @@ from training_ai.memory_models import (
     ThreadMemoryReceipt,
 )
 from training_ai.memory_store import MemoryStore
-from training_ai.memory_tools import MemoryDeps
+from training_ai.memory_tools import ConversationMemoryDeps
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def create_conversation_app(
                 run["thread_id"], run["user_sequence"], run["id"], timestamp, timezone
             )
             prepared = prepare_turn(memory, source, datetime.now(zone).date(), limits)
-            deps = MemoryDeps(memory, source, compact(prepared.context))
+            deps = ConversationMemoryDeps(memory, source, compact(prepared.context))
             async with agent.run_stream_events(
                 message_history=prepared.messages,
                 deps=deps,

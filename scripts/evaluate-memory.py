@@ -11,7 +11,7 @@ from starlette.testclient import TestClient
 
 from training_ai.config import Config
 from training_ai.conversation_api import create_conversation_app
-from training_ai.training_agent import create_agent
+from training_ai.training_agent import create_conversation_agent
 
 
 def run_turn(client, thread_id, text):
@@ -40,7 +40,7 @@ def main():
     failures = 0
     for case in cases:
         config = Config(args.model, "http://unused.invalid/mcp", None, None, None, None, None, None)
-        agent = create_agent(config)
+        agent = create_conversation_agent(config)
         # Disable external MCP; local memory tools stay available.
         with tempfile.TemporaryDirectory(prefix="training-ai-evaluation-") as directory:
             with agent.override(toolsets=[]):

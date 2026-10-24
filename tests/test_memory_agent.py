@@ -12,7 +12,7 @@ from test_conversation_api import create_thread, wait_for_status
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.memory_models import MemoryLimits
-from training_ai.memory_tools import configure_memory_agent
+from training_ai.memory_tools import add_conversation_memory
 
 
 def latest_prompt(messages):
@@ -26,7 +26,7 @@ def latest_return(messages):
 
 def synthetic_agent(stream):
     agent = Agent(FunctionModel(stream_function=stream))
-    configure_memory_agent(agent)
+    add_conversation_memory(agent)
     return agent
 
 

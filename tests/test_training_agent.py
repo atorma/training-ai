@@ -59,7 +59,7 @@ def test_chat_clock_refreshes_in_saved_conversations(
         signal_basic_auth_password=None,
         timezone=zone,
     )
-    agent = training_agent.create_agent(config)
+    agent = training_agent.create_conversation_agent(config)
     requests = []
 
     async def respond(messages, info):

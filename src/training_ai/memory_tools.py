@@ -121,7 +121,7 @@ class MemoryWriting(MemoryReading, Protocol):
 
 
 @dataclass(frozen=True)
-class MemoryDeps:
+class ConversationMemoryDeps:
     """Conversation turn deps, prepared once before the run."""
 
     store: MemoryStore
@@ -276,7 +276,7 @@ def add_memory_reading(agent: Agent[Any, Any]) -> None:
         return read_instructions(ctx.deps.memory_context)
 
 
-def configure_memory_agent(agent: Agent[Any, Any]) -> None:
+def add_conversation_memory(agent: Agent[Any, Any]) -> None:
     """Both halves for the conversation agent, as one instruction block ending in the context."""
     _add_read_tools(agent)
     _add_write_tools(agent)

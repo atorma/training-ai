@@ -10,14 +10,14 @@ from training_ai.conversation_api import create_conversation_app
 from training_ai.signal_sender import build_signal_sender
 from training_ai.summary_agent import create_summary_agent
 from training_ai.summary_api import create_summary_handler
-from training_ai.training_agent import create_agent
+from training_ai.training_agent import create_conversation_agent
 
 
 def create_app(config: Config) -> Starlette:
     logfire.configure(send_to_logfire="if-token-present")
     logfire.instrument_pydantic_ai()
 
-    conversation_agent = create_agent(config)
+    conversation_agent = create_conversation_agent(config)
     app = create_conversation_app(
         conversation_agent, config.database_path, config.timezone, config.memory_limits()
     )
