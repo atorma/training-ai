@@ -15,9 +15,19 @@ Built using PydanticAI and MCP tools.
 
 ### MCP Server
 
-The project does not come with an MCP server. If you are using Intervals.icu,
-you can use [intervals-mcp-server](https://github.com/mvilanova/intervals-mcp-server).
-The MCP server provides a streamable HTTP endpoint.
+The assistant reads training data from an external MCP server over streamable HTTP.
+For Intervals.icu, `make run-mcp` starts the pinned Docker image of
+[futureweb/intervals-mcp-server](https://github.com/futureweb/intervals-mcp-server)
+on `127.0.0.1:8000`, matching `MCP_SERVER_URL` in `.env.example`:
+
+```bash
+cp .env.example .env
+# set INTERVALS_API_KEY and INTERVALS_ATHLETE_ID in .env
+make run-mcp
+```
+
+It uses `TIMEZONE` from `.env` for dates. The server exposes read-only tools by default.
+Set `MCP_PORT` to use another host port, and change the port in `MCP_SERVER_URL` to match.
 
 ### Web Chat UI
 
@@ -55,6 +65,7 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 
 | Command | Purpose |
 | --- | --- |
+| `make run-mcp` | Run the Intervals.icu MCP server in Docker on port 8000. |
 | `make dev-web` | Fastest UI loop: Vite hot reload on port 5173 plus the API server. |
 | `make run-web` | Build the frontend once and serve it as production does, with Python reload. |
 | `make build-web` | Compile frontend assets. |
@@ -84,7 +95,8 @@ ESLint/Prettier, and TypeScript. Keep the Ruff hook revision aligned with its Py
 
 ## Environment Variables
 
-- `MCP_SERVER_URL` - MCP streamable HTTP endpoint (e.g., `http://localhost:3001/mcp`).
+- `MCP_SERVER_URL` - MCP streamable HTTP endpoint (e.g., `http://127.0.0.1:8000/mcp`).
+- `INTERVALS_API_KEY` / `INTERVALS_ATHLETE_ID` - Intervals.icu credentials for `make run-mcp` only.
 - `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
 - Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
 - `DATABASE_PATH` - SQLite file for web threads (default: `data/conversations.sqlite3`).

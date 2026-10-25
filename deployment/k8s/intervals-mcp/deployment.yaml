@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intervals-mcp-deployment
+  labels:
+    app: intervals-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intervals-mcp
+  template:
+    metadata:
+      name: intervals-mcp
+      labels:
+        app: intervals-mcp
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: intervals-mcp-server
+          # Pinned separately from the Makefile's local INTERVALS_MCP_IMAGE.
+          image: ghcr.io/futureweb/intervals-mcp-server@sha256:93dad39e589142ed14c706759bbb143fca87636ae3a65ba71ed13c5626fbb31f
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          # The server has no health endpoint; its static icon route proves the HTTP app serves.
+          readinessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: MCP_TRANSPORT
+              value: http
+            - name: FASTMCP_HOST
+              value: 0.0.0.0
+            - name: FASTMCP_PORT
+              value: "8000"
+            - name: FASTMCP_LOG_LEVEL
+              value: INFO
+            - name: MCP_PERMISSIONS
+              value: read,write
+            - name: ATHLETE_TIMEZONE
+              value: Europe/Helsinki
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: intervals-api-secret
+                  key: API_KEY
+            - name: ATHLETE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: intervals-api-secret
+                  key: ATHLETE_ID
+      restartPolicy: Always

@@ -24,6 +24,7 @@ test-results/
 
 # Environment files
 .env
+.envrc
 
 # IntelliJ IDEA / PyCharm
 .idea/

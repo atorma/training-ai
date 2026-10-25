@@ -4,10 +4,12 @@ The manifests deploy one Python server with SQLite on GKE, with separate Kustomi
 
 - `deployment/k8s/app/`: Deployment, Service, Ingress, Certificate, and summary CronJob.
 - `deployment/k8s/storage/`: PersistentVolumeClaim and StorageClass.
+- `deployment/k8s/intervals-mcp/`: the Intervals.icu MCP server the application calls.
 
-Render them locally with `make render-k8s` and `make render-k8s-storage`; neither contacts
-a cluster. There is no combined root Kustomization that can delete both sets together.
-The deployment scripts apply to the current kubectl context and namespace.
+Render them locally with `make render-k8s`, `make render-k8s-storage` and
+`make render-k8s-mcp`; none contacts a cluster. There is no combined root Kustomization that
+can delete all sets together. The deployment scripts apply to the current kubectl context and
+namespace.
 
 Build the image with `make build-docker` after `make bootstrap` and configuring
 `GCLOUD_REPOSITORY` in `deployment/.env`. BuildKit and the Docker buildx CLI plugin are
@@ -96,6 +98,19 @@ not undo migrations; an older image rejects a newer database. For a restore:
 Restore operations are deliberate maintenance; no automatic restore script is provided.
 If there are chats on an existing pod's container filesystem, export them consistently before
 the first rollout with this PVC. Mounting a new volume does not copy the old container data.
+
+## Intervals.icu MCP server
+
+The application reads training data through the
+[futureweb/intervals-mcp-server](https://github.com/futureweb/intervals-mcp-server) image,
+deployed from its own Kustomize root with `make deploy-k8s-mcp`. Keeping it separate means
+application deploys and deletes leave it alone. The image is published and pinned by digest,
+so there is nothing to build. The deployment expects the
+`intervals-api-secret` and `intervals-mcp-basic-auth` secrets to exist.
+
+The ingress basic auth guards the public endpoint, so the server's own OAuth stays off, which
+also keeps the server stateless. Leave `MCP_PUBLIC_URL` unset: it enables Host header checks that
+would reject the in-cluster service name the application uses.
 
 ## Removing the application
 

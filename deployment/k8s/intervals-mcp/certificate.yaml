@@ -1,0 +1,11 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: intervals-mcp-certificate
+spec:
+  secretName: intervals-mcp-certificate-secret
+  dnsNames:
+    - intervals-mcp.atorma.fi
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
