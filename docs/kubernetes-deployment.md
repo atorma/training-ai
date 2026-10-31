@@ -15,6 +15,9 @@ Build the image with `make build-docker` after `make bootstrap` and configuring
 `GCLOUD_REPOSITORY` in `deployment/.env`. BuildKit and the Docker buildx CLI plugin are
 required; check `docker buildx version` when using Colima. The script runs `make build-web`
 locally before Docker packages the generated assets; no Node build stage runs in Docker.
+The image targets `linux/amd64` to match the GKE nodes, whatever the local Docker host
+architecture is. On an aarch64 Colima VM this needs amd64 emulation (`vmType: vz` with
+`rosetta: true`, or binfmt/QEMU). Override with `IMAGE_PLATFORM` if the node pool changes.
 Direct Docker builds require
 `make build-web` first. Missing assets fail the image build; rebuilding avoids stale UI assets.
 Image push and application deployment remain separate script operations.

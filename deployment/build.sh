@@ -6,9 +6,11 @@ cd "$(dirname "$0")"
 . ./.env
 
 IMAGE="$GCLOUD_REPOSITORY/training-ai-server:$(get_commit_hash)"
+# GKE nodes are amd64; build for them regardless of the local Docker host architecture.
+IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 
 make -C .. build-web
-DOCKER_BUILDKIT=1 docker build -f ../Dockerfile -t training-ai-server -t "$IMAGE" ../
+DOCKER_BUILDKIT=1 docker build --platform "$IMAGE_PLATFORM" -f ../Dockerfile -t training-ai-server -t "$IMAGE" ../
 
 if [ -f .env ]; then
   tmp_file=$(mktemp)
