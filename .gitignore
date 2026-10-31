@@ -30,6 +30,7 @@ test-results/
 .idea/
 *.iml
 out/
+.mcp.json
 
 # Docs specs
 docs/specs/
