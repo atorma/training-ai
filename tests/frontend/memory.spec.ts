@@ -35,7 +35,10 @@ test("capture and use shared memory, inspect its source and correct across devic
   ).toBeVisible();
   await composer.fill("Unsent draft survives memory view");
   await page.getByRole("button", { name: "Memory", exact: true }).click();
-  const memory = page.getByRole("dialog", { name: "Memory", exact: true });
+  const memory = page.getByRole("dialog", {
+    name: "Shared training memory",
+    exact: true,
+  });
   await memory
     .getByRole("button", { name: /Synthetic ankle soreness observation/ })
     .first()
@@ -50,6 +53,9 @@ test("capture and use shared memory, inspect its source and correct across devic
   await expect(
     memory.getByText("Memory updated.", { exact: true }),
   ).toBeVisible();
+  // An outside click must not discard the dialog (and any unsaved correction).
+  await page.mouse.click(5, 5);
+  await expect(memory).toBeVisible();
   await memory.getByRole("button", { name: "Close memory" }).click();
   await expect(composer).toHaveValue("Unsent draft survives memory view");
 
@@ -57,7 +63,10 @@ test("capture and use shared memory, inspect its source and correct across devic
   const other = await device.newPage();
   await other.goto(sourceUrl);
   await other.getByRole("button", { name: "Memory", exact: true }).click();
-  const remote = other.getByRole("dialog", { name: "Memory", exact: true });
+  const remote = other.getByRole("dialog", {
+    name: "Shared training memory",
+    exact: true,
+  });
   await remote
     .getByRole("button", {
       name: /Corrected synthetic observation observation/,
@@ -108,7 +117,10 @@ test("mobile memory can end and forget a constraint; concurrent correction prese
       exact: true,
     })
     .click();
-  const memory = page.getByRole("dialog", { name: "Memory", exact: true });
+  const memory = page.getByRole("dialog", {
+    name: "Shared training memory",
+    exact: true,
+  });
   await memory
     .getByRole("textbox", { name: "Statement", exact: true })
     .fill("Local unsaved correction");
@@ -192,10 +204,13 @@ test("goal capture, horizon correction, closure, resumption and kind correction 
   ).toBeVisible();
   await page.getByRole("button", { name: "Memory", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "Memory", exact: true })
+    .getByRole("dialog", { name: "Shared training memory", exact: true })
     .getByRole("button", { name: /Synthetic swimming goal goal/ })
     .click();
-  const memory = page.getByRole("dialog", { name: "Memory", exact: true });
+  const memory = page.getByRole("dialog", {
+    name: "Shared training memory",
+    exact: true,
+  });
   await memory.getByLabel("Effective from", { exact: true }).fill("2020-01-01");
   await memory
     .getByLabel("Effective through", { exact: true })
@@ -247,9 +262,7 @@ test("manual forgetting lets an active answer finish and preserves unrelated con
     }),
   ).toBeVisible();
   await expect(
-    page.getByText("Generating response… You can return later.", {
-      exact: true,
-    }),
+    page.getByRole("status", { name: "Generating response" }),
   ).toBeVisible();
   const threadId = new URL(page.url()).searchParams.get("thread")!;
   const detail = await (

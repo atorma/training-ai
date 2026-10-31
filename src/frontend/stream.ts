@@ -73,8 +73,9 @@ function liveMessage(message: UIMessage, runId: string): ThreadMessageLike {
           part.state === "output-available"
             ? part.output
             : part.state === "output-error"
-              ? { error: part.errorText }
+              ? part.errorText
               : undefined,
+        isError: part.state === "output-error",
       });
     }
   }

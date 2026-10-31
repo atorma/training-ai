@@ -1,5 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { Detail, Thread } from "../../src/frontend/api";
+
+async function conversationAction(page: Page, action: "Rename" | "Delete") {
+  await page
+    .locator('[data-slot="aui_thread-list-item"][data-active]')
+    .getByRole("button", { name: "More options" })
+    .click();
+  await page.getByRole("menuitem", { name: action, exact: true }).click();
+}
 
 function userPrompts(detail: Detail) {
   return detail.messages.flatMap((message) =>
@@ -104,8 +112,12 @@ test("composer keeps focus after sending", async ({ page }) => {
   for (const prompt of ["First focus question", "Another focus question"]) {
     await composer.fill(prompt);
     await send.click();
+    // Inside the last message: after the transcript it would sit below the top-anchor spacer.
     await expect(
-      page.getByText("Generating response… You can return later."),
+      page
+        .locator(".message")
+        .last()
+        .getByRole("status", { name: "Generating response" }),
     ).toBeVisible();
     await expect(composer).toBeFocused();
     await expect(composer).toHaveValue("");
@@ -215,7 +227,7 @@ test("save, reopen from another browser, continue, rename, and delete", async ({
     .fill("Continue on another device");
   await otherPage.getByRole("button", { name: "Send", exact: true }).click();
   await expect(
-    otherPage.getByText("Generating response… You can return later."),
+    otherPage.getByRole("status", { name: "Generating response" }),
   ).toBeVisible();
   await otherPage.close();
 
@@ -225,8 +237,10 @@ test("save, reopen from another browser, continue, rename, and delete", async ({
       { exact: true },
     ),
   ).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept("My training thread"));
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await conversationAction(page, "Rename");
+  const title = page.getByRole("textbox", { name: "Conversation title" });
+  await title.fill("My training thread");
+  await title.press("Enter");
   await expect(
     page.getByRole("heading", { name: "My training thread" }),
   ).toBeVisible();
@@ -253,7 +267,7 @@ test("save, reopen from another browser, continue, rename, and delete", async ({
     ),
   ).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await conversationAction(page, "Delete");
   await expect(
     page.getByRole("button", { name: "My training thread", exact: true }),
   ).toHaveCount(0);
@@ -386,10 +400,10 @@ test("cross-device deletion clears the selection and keeps the sidebar updating"
   const other = await device.newPage();
   await other.goto(`/?thread=${thread.id}`);
   await expect(
-    other.getByRole("button", { name: "Delete", exact: true }),
-  ).toBeEnabled();
+    other.getByRole("heading", { name: "Deleted elsewhere" }),
+  ).toBeVisible();
   other.once("dialog", (dialog) => dialog.accept());
-  await other.getByRole("button", { name: "Delete", exact: true }).click();
+  await conversationAction(other, "Delete");
 
   await expect(
     page.getByRole("button", { name: "Deleted elsewhere", exact: true }),
@@ -428,10 +442,11 @@ test("retry a failed response without duplicating the message", async ({
     .getByRole("textbox", { name: "Message" })
     .fill("Retry this response");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(
-    page.getByText("Response failed. Your messages are saved."),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Retry response" }).click();
+  const failure = page
+    .getByRole("alert")
+    .filter({ hasText: "Response failed" });
+  await expect(failure).toContainText("Your messages are saved.");
+  await failure.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(
     page.getByText("Saved conversation: Retry this response", { exact: true }),
   ).toBeVisible();
@@ -453,17 +468,37 @@ test("frozen historical messages render with reasoning, tool retry results and o
         exact: true,
       }),
   ).toBeVisible();
+  await page.locator('[data-slot="reasoning-trigger"]').first().click();
   await expect(
     page.getByText("Fictional historical reasoning", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Fictional gearing comparison", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".tool-result summary")).toHaveCount(2);
-  await page.locator(".tool-result summary").first().click();
-  await expect(page.locator(".tool-result pre").first()).toContainText(
-    "Use a valid ID",
-  );
+  const groups = page.locator('[data-slot="tool-group-trigger"]');
+  for (const group of await groups.all()) await group.click();
+  const toolCalls = page.locator('[data-slot="tool-fallback-root"]');
+  await expect(toolCalls).toHaveCount(2);
+  await toolCalls
+    .first()
+    .locator('[data-slot="tool-fallback-trigger"]')
+    .click();
+  await expect(
+    toolCalls.first().locator('[data-slot="tool-fallback-trigger-label"]'),
+  ).toContainText("Failed tool");
+  await expect(
+    toolCalls.first().locator('[data-slot="tool-fallback-error"]'),
+  ).toContainText("Use a valid ID");
+  await expect(
+    toolCalls.last().locator('[data-slot="tool-fallback-trigger-label"]'),
+  ).toContainText("Used tool");
+  // The runtime cannot reload or edit, so those controls are hidden, not disabled.
+  await expect(
+    page.getByRole("button", { name: "Refresh", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator(".message time").first()).toHaveAttribute(
     "datetime",
     "2026-10-01T12:00:00.000Z",
@@ -478,4 +513,108 @@ test("frozen historical messages render with reasoning, tool retry results and o
       { exact: true },
     ),
   ).toBeVisible();
+});
+
+test("mobile conversation sheet switches threads, closes on navigation and opens memory", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const response = await page.request.post("/api/threads");
+  const thread: Thread = await response.json();
+  await page.request.patch(`/api/threads/${thread.id}`, {
+    data: { title: "Mobile sheet thread" },
+  });
+  await page.goto("/");
+  const conversation = page.getByRole("button", {
+    name: "Mobile sheet thread",
+    exact: true,
+  });
+  await expect(conversation).toBeHidden();
+  await page.getByRole("button", { name: "Open conversations" }).click();
+  await conversation.click();
+  await expect(
+    page.getByRole("heading", { name: "Mobile sheet thread" }),
+  ).toBeVisible();
+  await expect(conversation).toBeHidden();
+  await expect(page).toHaveURL(new RegExp(`thread=${thread.id}$`));
+
+  await page.getByRole("button", { name: "Open conversations" }).click();
+  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Shared training memory", exact: true }),
+  ).toBeVisible();
+  await expect(conversation).toBeHidden();
+});
+
+test("connection banner shows reconnecting and resumes when the event stream returns", async ({
+  page,
+}) => {
+  await page.route("**/api/events", (route) => route.abort("failed"));
+  await page.goto("/");
+  const banner = page.locator('[data-slot="connection-state"]');
+  await expect(banner).toContainText("Reconnecting");
+  await page.unroute("**/api/events");
+  await expect(banner).toContainText("Picked the stream back up.", {
+    timeout: 15000,
+  });
+  await expect(banner).toHaveCount(0);
+});
+
+test("a failed rename keeps the inline editor open with the typed title", async ({
+  page,
+}) => {
+  const response = await page.request.post("/api/threads");
+  const thread: Thread = await response.json();
+  await page.goto(`/?thread=${thread.id}`);
+  await page.route(`**/api/threads/${thread.id}`, (route) =>
+    route.request().method() === "PATCH"
+      ? route.abort("failed")
+      : route.continue(),
+  );
+  await conversationAction(page, "Rename");
+  const title = page.getByRole("textbox", { name: "Conversation title" });
+  await title.fill("Unsaved title");
+  await title.press("Enter");
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(title).toHaveValue("Unsaved title");
+  // Untitled threads are named "New conversation", like the new-thread button; clean up.
+  await page.request.delete(`/api/threads/${thread.id}`);
+});
+
+test("deleting a conversation with a running response explains instead of confirming", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Message" })
+    .fill("Delete while running");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByRole("status", { name: "Generating response" }),
+  ).toBeVisible();
+  let confirmed = false;
+  page.on("dialog", (dialog) => {
+    confirmed = true;
+    void dialog.dismiss();
+  });
+  await conversationAction(page, "Delete");
+  await expect(page.getByRole("alert").first()).toContainText(
+    "Wait for the response to finish",
+  );
+  expect(confirmed).toBe(false);
+});
+
+test("the sidebar remembers being collapsed and ignores its shortcut while typing", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const sidebar = page.locator('[data-slot="sidebar"][data-state]');
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  const composer = page.getByRole("textbox", { name: "Message" });
+  await composer.press("ControlOrMeta+b");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.getByRole("button", { name: "Open conversations" }).click();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
 });

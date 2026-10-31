@@ -46,7 +46,8 @@ flowchart TD
 | Memory context | Thread-independent selection from one snapshot: required memory and recent observations under their budgets | [memory_context.py](../src/training_ai/memory_context.py) |
 | Conversation context | Once-per-turn preparation: memory context plus retry receipts and bounded history with current revisions or withdrawal notices | [conversation_context.py](../src/training_ai/conversation_context.py) |
 | Memory management | HTTP inspection/edit/forget commands and responsive browser view | [memory_api.py](../src/training_ai/memory_api.py), [memory.tsx](../src/frontend/memory.tsx) |
-| Frontend | Thread selection, SSE subscriptions, assistant-ui runtime, Markdown/tool rendering and timestamps | [main.tsx](../src/frontend/main.tsx) |
+| Frontend | Thread selection, SSE subscriptions, external-store runtime and thread-list adapter, run failure/retry and memory notices | [main.tsx](../src/frontend/main.tsx) |
+| UI components | shadcn/ui (Base UI, `base-nova`) and assistant-ui elements copied into the repo and edited locally: Thread (Enter adds a new line), thread list sidebar, tool group/fallback, Markdown text, error and connection state, thinking indicator; the Memory dialog uses shadcn Dialog, Field, NativeSelect, Item, Alert and Collapsible | [components/](../src/frontend/components/), [components.json](../components.json) |
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
 | Summary path | Date-window validation, read-only memory context, summary generation and optional Signal delivery | [summary_api.py](../src/training_ai/summary_api.py), [summary_agent.py](../src/training_ai/summary_agent.py), [signal_sender.py](../src/training_ai/signal_sender.py) |

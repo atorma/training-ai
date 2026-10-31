@@ -1,4 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import { ChevronRightIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   memoryApi,
   ApiError,
@@ -7,6 +45,49 @@ import {
   type MemoryPage,
   type MemoryResult,
 } from "./api";
+
+// iOS zooms into form controls below 16px, so small screens use the base size.
+const control = "max-sm:text-base";
+
+function TextField({
+  label,
+  ...props
+}: { label: string } & ComponentProps<typeof Input>) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input id={id} className={control} {...props} />
+    </Field>
+  );
+}
+
+function SelectField({
+  label,
+  children,
+  ...props
+}: { label: string; children: ReactNode } & Omit<
+  ComponentProps<"select">,
+  "size"
+>) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <NativeSelect id={id} className={cn("w-full", control)} {...props}>
+        {children}
+      </NativeSelect>
+    </Field>
+  );
+}
+
+function kindTitle(kind: MemoryData["kind"]) {
+  return kind === "constraint"
+    ? "Constraint"
+    : kind === "goal"
+      ? "Goal"
+      : "Observation";
+}
 
 export function MemoryView({
   entryId,
@@ -38,6 +119,7 @@ export function MemoryView({
   });
   const [offset, setOffset] = useState(0);
   const version = useRef(0);
+  const statementId = useId();
 
   const refresh = useCallback(async () => {
     const current = ++version.current;
@@ -165,145 +247,173 @@ export function MemoryView({
   }
 
   return (
-    <section className="memory-view" aria-label="Shared training memory">
-      <div className="memory-heading">
-        <h2>Shared training memory</h2>
-        <button onClick={onClose}>Close memory</button>
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <DialogTitle className="text-lg">Shared training memory</DialogTitle>
+          <DialogDescription>
+            Observations, goals and constraints are shared across conversations.
+            Old reports do not establish today's condition.
+          </DialogDescription>
+        </div>
+        <Button variant="outline" onClick={onClose}>
+          Close memory
+        </Button>
       </div>
-      <p>
-        Observations, goals and constraints are shared across conversations. Old
-        reports do not establish today's condition.
-      </p>
-      <div className="memory-filters">
-        <label>
-          Topic
-          <input
-            value={filters.topic}
-            onChange={(e) => {
-              setFilters({ ...filters, topic: e.target.value });
-              setOffset(0);
-            }}
-          />
-        </label>
-        <label>
-          Kind
-          <select
-            value={filters.kind}
-            onChange={(e) => {
-              setFilters({ ...filters, kind: e.target.value });
-              setOffset(0);
-            }}
-          >
-            <option value="">All kinds</option>
-            <option value="observation">Observations</option>
-            <option value="constraint">Constraints</option>
-            <option value="goal">Goals</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select
-            value={filters.status}
-            onChange={(e) => {
-              setFilters({ ...filters, status: e.target.value });
-              setOffset(0);
-            }}
-          >
-            <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="valid">Historical observations</option>
-            <option value="ended">Ended</option>
-            <option value="upcoming">Upcoming</option>
-            <option value="needs_review">Needs review</option>
-            <option value="achieved">Achieved</option>
-            <option value="withdrawn">Withdrawn goals</option>
-          </select>
-        </label>
-        <label>
-          From
-          <input
-            type="date"
-            value={filters.start}
-            onChange={(e) => {
-              setFilters({ ...filters, start: e.target.value });
-              setOffset(0);
-            }}
-          />
-        </label>
-        <label>
-          Through
-          <input
-            type="date"
-            value={filters.end}
-            onChange={(e) => {
-              setFilters({ ...filters, end: e.target.value });
-              setOffset(0);
-            }}
-          />
-        </label>
-      </div>
+      <FieldGroup className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <TextField
+          label="Topic"
+          value={filters.topic}
+          onChange={(e) => {
+            setFilters({ ...filters, topic: e.target.value });
+            setOffset(0);
+          }}
+        />
+        <SelectField
+          label="Kind"
+          value={filters.kind}
+          onChange={(e) => {
+            setFilters({ ...filters, kind: e.target.value });
+            setOffset(0);
+          }}
+        >
+          <NativeSelectOption value="">All kinds</NativeSelectOption>
+          <NativeSelectOption value="observation">
+            Observations
+          </NativeSelectOption>
+          <NativeSelectOption value="constraint">
+            Constraints
+          </NativeSelectOption>
+          <NativeSelectOption value="goal">Goals</NativeSelectOption>
+        </SelectField>
+        <SelectField
+          label="Status"
+          value={filters.status}
+          onChange={(e) => {
+            setFilters({ ...filters, status: e.target.value });
+            setOffset(0);
+          }}
+        >
+          <NativeSelectOption value="">All statuses</NativeSelectOption>
+          <NativeSelectOption value="active">Active</NativeSelectOption>
+          <NativeSelectOption value="valid">
+            Historical observations
+          </NativeSelectOption>
+          <NativeSelectOption value="ended">Ended</NativeSelectOption>
+          <NativeSelectOption value="upcoming">Upcoming</NativeSelectOption>
+          <NativeSelectOption value="needs_review">
+            Needs review
+          </NativeSelectOption>
+          <NativeSelectOption value="achieved">Achieved</NativeSelectOption>
+          <NativeSelectOption value="withdrawn">
+            Withdrawn goals
+          </NativeSelectOption>
+        </SelectField>
+        <TextField
+          label="From"
+          type="date"
+          value={filters.start}
+          onChange={(e) => {
+            setFilters({ ...filters, start: e.target.value });
+            setOffset(0);
+          }}
+        />
+        <TextField
+          label="Through"
+          type="date"
+          value={filters.end}
+          onChange={(e) => {
+            setFilters({ ...filters, end: e.target.value });
+            setOffset(0);
+          }}
+        />
+      </FieldGroup>
       {(error || notice) && (
         // Sticky so feedback stays visible when actions are at the bottom of a long form.
-        <div className="memory-feedback">
-          {error && <p role="alert">{error}</p>}
-          {notice && <p role="status">{notice}</p>}
+        <div className="bg-popover sticky -top-4 z-10 -mx-4 flex flex-col gap-2 px-4 py-1 sm:-top-6 sm:-mx-6 sm:px-6">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {notice && (
+            <Alert role="status">
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
-      <div className="memory-columns">
-        <div className="memory-list">
-          <p>{entries.total} entries</p>
-          {entries.entries.map((item) => (
-            <button
-              key={item.id}
-              aria-current={selected === item.id ? "true" : undefined}
-              onClick={() => choose(item.id)}
-            >
-              <strong>{item.statement}</strong>
-              <span>
-                {item.kind} · {item.status} ·{" "}
-                {item.effective_from ?? "Date uncertain"}
-                {item.effective_to ? ` – ${item.effective_to}` : ""}
-              </span>
-            </button>
-          ))}
-          {!entries.total && <p>No memory matches these filters.</p>}
-          <div className="memory-actions">
-            <button
+      <div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="text-muted-foreground">{entries.total} entries</p>
+          <ItemGroup className="gap-2">
+            {entries.entries.map((item) => (
+              <Item
+                key={item.id}
+                size="sm"
+                variant={selected === item.id ? "muted" : "outline"}
+                render={<button type="button" />}
+                aria-current={selected === item.id ? "true" : undefined}
+                onClick={() => choose(item.id)}
+                className="text-left"
+              >
+                <ItemContent className="min-w-0">
+                  <ItemTitle className="wrap-anywhere">
+                    {item.statement}
+                  </ItemTitle>
+                  <ItemDescription>
+                    {item.kind} · {item.status} ·{" "}
+                    {item.effective_from ?? "Date uncertain"}
+                    {item.effective_to ? ` – ${item.effective_to}` : ""}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+            ))}
+          </ItemGroup>
+          {!entries.total && (
+            <p className="text-muted-foreground">
+              No memory matches these filters.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - 20))}
             >
               Previous
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               disabled={entries.next_offset === null}
               onClick={() => setOffset(entries.next_offset!)}
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
         {entry && draft && (
-          <div className="memory-detail">
+          <div className="flex min-w-0 flex-col gap-6">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 void save(draft);
               }}
             >
-              <h3>
-                {entry.kind === "constraint"
-                  ? "Constraint"
-                  : entry.kind === "goal"
-                    ? "Goal"
-                    : "Observation"}
-              </h3>
-              <p>
-                Recorded {new Date(entry.recorded_at).toLocaleString()} ·
-                Revision {entry.revision} · {entry.status}
-              </p>
-              <label>
-                Memory kind
-                <select
+              <FieldGroup className="gap-4">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-base font-medium">
+                    {kindTitle(entry.kind)}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Recorded {new Date(entry.recorded_at).toLocaleString()} ·
+                    Revision {entry.revision} · {entry.status}
+                  </p>
+                </div>
+                <SelectField
+                  label="Memory kind"
                   value={draft.kind}
                   onChange={(e) => {
                     const kind = e.target.value as MemoryData["kind"];
@@ -321,60 +431,56 @@ export function MemoryView({
                     setDirty(true);
                   }}
                 >
-                  <option value="observation">Observation</option>
-                  <option value="constraint">Constraint</option>
-                  <option value="goal">Goal</option>
-                </select>
-              </label>
-              <label>
-                Statement
-                <textarea
-                  required
-                  maxLength={1500}
-                  value={draft.statement}
-                  onChange={(e) => field("statement", e.target.value)}
-                />
-              </label>
-              <label>
-                Topics (comma separated)
-                <input
+                  <NativeSelectOption value="observation">
+                    Observation
+                  </NativeSelectOption>
+                  <NativeSelectOption value="constraint">
+                    Constraint
+                  </NativeSelectOption>
+                  <NativeSelectOption value="goal">Goal</NativeSelectOption>
+                </SelectField>
+                <Field>
+                  <FieldLabel htmlFor={statementId}>Statement</FieldLabel>
+                  <Textarea
+                    id={statementId}
+                    className={cn("min-h-24", control)}
+                    required
+                    maxLength={1500}
+                    value={draft.statement}
+                    onChange={(e) => field("statement", e.target.value)}
+                  />
+                </Field>
+                <TextField
+                  label="Topics (comma separated)"
                   value={draft.topics.join(", ")}
                   onChange={(e) => field("topics", e.target.value.split(","))}
                 />
-              </label>
-              <label>
-                Attribution
-                <input
+                <TextField
+                  label="Attribution"
                   required
                   maxLength={300}
                   value={draft.attribution}
                   onChange={(e) => field("attribution", e.target.value)}
                 />
-              </label>
-              <div className="memory-filters">
-                <label>
-                  Effective from
-                  <input
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <TextField
+                    label="Effective from"
                     type="date"
                     value={draft.effective_from ?? ""}
                     onChange={(e) =>
                       field("effective_from", e.target.value || null)
                     }
                   />
-                </label>
-                <label>
-                  Effective through
-                  <input
+                  <TextField
+                    label="Effective through"
                     type="date"
                     value={draft.effective_to ?? ""}
                     onChange={(e) =>
                       field("effective_to", e.target.value || null)
                     }
                   />
-                </label>
-                <label>
-                  Date precision
-                  <select
+                  <SelectField
+                    label="Date precision"
                     value={draft.date_precision}
                     onChange={(e) =>
                       field(
@@ -383,239 +489,267 @@ export function MemoryView({
                       )
                     }
                   >
-                    <option value="unknown">Unknown</option>
-                    <option value="exact">Exact</option>
-                    <option value="approximate">Approximate</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                Original date wording
-                <input
+                    <NativeSelectOption value="unknown">
+                      Unknown
+                    </NativeSelectOption>
+                    <NativeSelectOption value="exact">Exact</NativeSelectOption>
+                    <NativeSelectOption value="approximate">
+                      Approximate
+                    </NativeSelectOption>
+                  </SelectField>
+                </div>
+                <TextField
+                  label="Original date wording"
                   maxLength={300}
                   value={draft.date_description}
                   onChange={(e) => field("date_description", e.target.value)}
                 />
-              </label>
-              {draft.kind !== "observation" && (
-                <>
-                  <label>
-                    Review date
-                    <input
+                {draft.kind !== "observation" && (
+                  <>
+                    <TextField
+                      label="Review date"
                       type="date"
                       value={draft.review_on ?? ""}
                       onChange={(e) =>
                         field("review_on", e.target.value || null)
                       }
                     />
-                  </label>
-                  {draft.kind === "constraint" && (
-                    <>
-                      <label>
-                        End condition
-                        <input
+                    {draft.kind === "constraint" && (
+                      <>
+                        <TextField
+                          label="End condition"
                           maxLength={300}
                           value={draft.end_condition ?? ""}
                           onChange={(e) =>
                             field("end_condition", e.target.value || null)
                           }
                         />
-                      </label>
-                      <label>
-                        Ended on
-                        <input
+                        <TextField
+                          label="Ended on"
                           type="date"
                           value={draft.ended_on ?? ""}
                           onChange={(e) =>
                             field("ended_on", e.target.value || null)
                           }
                         />
-                      </label>
-                    </>
-                  )}
-                  <label>
-                    Reason for change
-                    <input
+                      </>
+                    )}
+                    <TextField
+                      label="Reason for change"
                       maxLength={500}
                       value={draft.reason}
                       onChange={(e) => field("reason", e.target.value)}
                     />
-                  </label>
-                </>
-              )}
-              {draft.kind === "goal" && (
-                <>
-                  <p>
-                    The effective dates describe the goal horizon. Passing them
-                    requires review, not automatic completion.
-                  </p>
-                  <label>
-                    Closure date
-                    <input
+                  </>
+                )}
+                {draft.kind === "goal" && (
+                  <>
+                    <FieldDescription>
+                      The effective dates describe the goal horizon. Passing
+                      them requires review, not automatic completion.
+                    </FieldDescription>
+                    <TextField
+                      label="Closure date"
                       type="date"
                       value={draft.closed_on ?? ""}
                       onChange={(e) =>
                         field("closed_on", e.target.value || null)
                       }
                     />
-                  </label>
-                  <p>
-                    Choose the actual closure date before marking a goal
-                    achieved or withdrawn.
-                  </p>
-                  <div className="memory-actions">
-                    {(["achieved", "withdrawn"] as const).map((outcome) => (
-                      <button
-                        key={outcome}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          if (!draft.closed_on) {
-                            setError("Choose a closure date first.");
-                            return;
+                    <FieldDescription>
+                      Choose the actual closure date before marking a goal
+                      achieved or withdrawn.
+                    </FieldDescription>
+                    <div className="flex flex-wrap gap-2">
+                      {(["achieved", "withdrawn"] as const).map((outcome) => (
+                        <Button
+                          key={outcome}
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            if (!draft.closed_on) {
+                              setError("Choose a closure date first.");
+                              return;
+                            }
+                            void save({ ...draft, outcome });
+                          }}
+                        >
+                          {outcome === "achieved" ? "Achieved" : "Withdrawn"}
+                        </Button>
+                      ))}
+                      {entry.closed_on && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() =>
+                            void save({
+                              ...draft,
+                              closed_on: null,
+                              outcome: null,
+                            })
                           }
-                          void save({ ...draft, outcome });
-                        }}
-                      >
-                        {outcome === "achieved" ? "Achieved" : "Withdrawn"}
-                      </button>
-                    ))}
-                    {entry.closed_on && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void save({
-                            ...draft,
-                            closed_on: null,
-                            outcome: null,
-                          })
-                        }
-                      >
-                        Resume goal
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-              <div className="memory-actions">
-                <button disabled={busy || !dirty} type="submit">
-                  Save correction
-                </button>
-                {draft.kind === "constraint" && entry.status !== "ended" && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!draft.ended_on) {
-                        setError(
-                          "Choose an end date before ending this constraint.",
-                        );
-                        return;
-                      }
-                      void save(draft);
-                    }}
-                  >
-                    End constraint
-                  </button>
+                        >
+                          Resume goal
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 )}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setDirty(false);
-                    setError("");
-                    void memoryApi<MemoryResult>(`/${entry.id}`)
-                      .then((current) => {
-                        if (current.status === "forgotten") {
-                          setSelected(null);
-                          setEntry(null);
-                          setDraft(null);
-                          setNotice(
-                            "This entry was forgotten. Chat history remains.",
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={busy || !dirty} type="submit">
+                    Save correction
+                  </Button>
+                  {draft.kind === "constraint" && entry.status !== "ended" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        if (!draft.ended_on) {
+                          setError(
+                            "Choose an end date before ending this constraint.",
                           );
                           return;
                         }
-                        setEntry(current);
-                        setDraft(current.data);
-                      })
-                      .catch((e) => setError(String(e)));
-                  }}
-                >
-                  Reload entry
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void forget()}
-                >
-                  Forget memory
-                </button>
-              </div>
-              <p>
-                Corrections replace the current version. New experiences should
-                be reported in chat.
-              </p>
-            </form>
-            <h3>Sources</h3>
-            {entry.sources?.map((source) => (
-              <p key={source.revision}>
-                Revision {source.revision} · interpreted in {source.timezone} ·{" "}
-                {source.available ? (
-                  <button onClick={() => onSource(source.thread_id!)}>
-                    Open source conversation
-                  </button>
-                ) : (
-                  "Source conversation deleted"
-                )}
-              </p>
-            ))}
-            <details>
-              <summary>Revision history</summary>
-              {entry.history?.map((revision) => (
-                <div key={revision.revision}>
-                  <p>
-                    Revision {revision.revision} · {revision.origin} ·{" "}
-                    {new Date(revision.changed_at).toLocaleString()} ·
-                    interpreted in {revision.source_timezone}
-                  </p>
-                  <p>
-                    {revision.data.kind} · {revision.data.statement} ·{" "}
-                    {revision.status} · {revision.data.attribution}
-                  </p>
-                  <p>
-                    {revision.data.topics.join(", ")} ·{" "}
-                    {revision.data.date_precision} ·{" "}
-                    {revision.data.date_description}
-                  </p>
-                  {revision.data.review_on && (
-                    <p>Review: {revision.data.review_on}</p>
+                        void save(draft);
+                      }}
+                    >
+                      End constraint
+                    </Button>
                   )}
-                  {revision.data.ended_on && (
-                    <p>Restriction lifted: {revision.data.ended_on}</p>
-                  )}
-                  {revision.data.end_condition && (
-                    <p>End condition: {revision.data.end_condition}</p>
-                  )}
-                  {revision.data.closed_on && (
-                    <p>
-                      Closed: {revision.data.closed_on} ·{" "}
-                      {revision.data.outcome}
-                    </p>
-                  )}
-                  {revision.data.reason && (
-                    <p>Reason: {revision.data.reason}</p>
-                  )}
-                  <p>
-                    {revision.data.effective_from ?? "Date uncertain"} –{" "}
-                    {revision.data.effective_to ?? "Unspecified"}
-                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setDirty(false);
+                      setError("");
+                      void memoryApi<MemoryResult>(`/${entry.id}`)
+                        .then((current) => {
+                          if (current.status === "forgotten") {
+                            setSelected(null);
+                            setEntry(null);
+                            setDraft(null);
+                            setNotice(
+                              "This entry was forgotten. Chat history remains.",
+                            );
+                            return;
+                          }
+                          setEntry(current);
+                          setDraft(current.data);
+                        })
+                        .catch((e) => setError(String(e)));
+                    }}
+                  >
+                    Reload entry
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void forget()}
+                  >
+                    Forget memory
+                  </Button>
                 </div>
-              ))}
-            </details>
+                <FieldDescription>
+                  Corrections replace the current version. New experiences
+                  should be reported in chat.
+                </FieldDescription>
+              </FieldGroup>
+            </form>
+            <div className="flex flex-col gap-2">
+              <h3 className="text-base font-medium">Sources</h3>
+              <ItemGroup className="gap-2">
+                {entry.sources?.map((source) => (
+                  <Item key={source.revision} size="sm" variant="outline">
+                    <ItemContent>
+                      <ItemDescription>
+                        Revision {source.revision} · interpreted in{" "}
+                        {source.timezone}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      {source.available ? (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          onClick={() => onSource(source.thread_id!)}
+                        >
+                          Open source conversation
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Source conversation deleted
+                        </span>
+                      )}
+                    </ItemActions>
+                  </Item>
+                ))}
+              </ItemGroup>
+            </div>
+            <Collapsible className="flex flex-col gap-2">
+              <CollapsibleTrigger
+                render={
+                  <Button variant="ghost" className="group/history w-fit" />
+                }
+              >
+                <ChevronRightIcon
+                  data-icon="inline-start"
+                  className="transition-transform group-data-panel-open/history:rotate-90"
+                />
+                Revision history
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-2">
+                {entry.history?.map((revision) => (
+                  <Item key={revision.revision} size="sm" variant="outline">
+                    <ItemContent className="text-muted-foreground min-w-0 gap-0.5 wrap-anywhere">
+                      <p className="text-foreground font-medium">
+                        Revision {revision.revision} · {revision.origin} ·{" "}
+                        {new Date(revision.changed_at).toLocaleString()} ·
+                        interpreted in {revision.source_timezone}
+                      </p>
+                      <p>
+                        {revision.data.kind} · {revision.data.statement} ·{" "}
+                        {revision.status} · {revision.data.attribution}
+                      </p>
+                      <p>
+                        {revision.data.topics.join(", ")} ·{" "}
+                        {revision.data.date_precision} ·{" "}
+                        {revision.data.date_description}
+                      </p>
+                      {revision.data.review_on && (
+                        <p>Review: {revision.data.review_on}</p>
+                      )}
+                      {revision.data.ended_on && (
+                        <p>Restriction lifted: {revision.data.ended_on}</p>
+                      )}
+                      {revision.data.end_condition && (
+                        <p>End condition: {revision.data.end_condition}</p>
+                      )}
+                      {revision.data.closed_on && (
+                        <p>
+                          Closed: {revision.data.closed_on} ·{" "}
+                          {revision.data.outcome}
+                        </p>
+                      )}
+                      {revision.data.reason && (
+                        <p>Reason: {revision.data.reason}</p>
+                      )}
+                      <p>
+                        {revision.data.effective_from ?? "Date uncertain"} –{" "}
+                        {revision.data.effective_to ?? "Unspecified"}
+                      </p>
+                    </ItemContent>
+                  </Item>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }

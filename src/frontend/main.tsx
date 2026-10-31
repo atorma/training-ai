@@ -1,26 +1,23 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
-  type ComponentPropsWithoutRef,
 } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AssistantRuntimeProvider,
-  ComposerPrimitive,
-  MessagePrimitive,
   MessageNotSentError,
-  ThreadPrimitive,
   useExternalStoreRuntime,
   useAuiState,
   type AppendMessage,
   type ThreadMessageLike,
-  type ToolCallMessagePartComponent,
   type ToolCallMessagePart,
+  type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import remarkGfm from "remark-gfm";
+import { BrainIcon } from "lucide-react";
 import {
   api,
   ApiError,
@@ -30,6 +27,29 @@ import {
 } from "./api";
 import { readRun } from "./stream";
 import { MemoryView } from "./memory";
+import {
+  ConnectionState,
+  type ConnectionPhase,
+} from "@/components/assistant-ui/elements/connection-state";
+import { ErrorState } from "@/components/assistant-ui/elements/error-state";
+import { ThinkingIndicator } from "@/components/assistant-ui/elements/thinking-indicator";
+import {
+  Thread as ThreadView,
+  type ThreadComponents,
+} from "@/components/assistant-ui/elements/thread.aui";
+import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
+import { ThreadListSidebar } from "@/components/assistant-ui/elements/threadlist-sidebar.aui";
+import {
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Item, ItemContent } from "@/components/ui/item";
 import "./style.css";
 
 function messages(detail: Detail | null): ThreadMessageLike[] {
@@ -46,7 +66,10 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
           (p) =>
             [
               p.tool_call_id,
-              p.part_kind === "retry-prompt" ? { error: p.content } : p.content,
+              {
+                result: p.content,
+                isError: p.part_kind === "retry-prompt",
+              },
             ] as const,
         ),
     ),
@@ -80,7 +103,7 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
           toolCallId: p.tool_call_id ?? `tool-${m.sequence}`,
           toolName: p.tool_name ?? "Tool",
           args: (args ?? {}) as ToolCallMessagePart["args"],
-          result: results.get(p.tool_call_id),
+          ...results.get(p.tool_call_id),
         });
       }
     }
@@ -102,51 +125,63 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
   });
 }
 
-const ToolResult: ToolCallMessagePartComponent = ({
-  toolName,
-  args,
-  result,
-}) => (
-  <details className="tool-result">
-    <summary>{toolName}</summary>
-    <pre>{JSON.stringify({ arguments: args, result }, null, 2)}</pre>
-  </details>
-);
-
-function MarkdownTable({ children }: ComponentPropsWithoutRef<"table">) {
-  return (
-    <div
-      className="markdown-table"
-      tabIndex={0}
-      role="region"
-      aria-label="Message table"
-    >
-      <table>{children}</table>
-    </div>
-  );
+function useThinkingLabel() {
+  return useAuiState((state) => {
+    if (!state.thread.isRunning) return undefined;
+    const last = state.thread.messages.at(-1);
+    if (!last || last.role !== "assistant" || last.content.length === 0)
+      return "Thinking";
+    const pending = last.content.find(
+      (part) => part.type === "tool-call" && part.result === undefined,
+    );
+    if (pending?.type === "tool-call") return `Running ${pending.toolName}`;
+    return "Writing";
+  });
 }
 
-function MarkdownText() {
+// When the visible run started, as first seen by this page. The API exposes no run start
+// time, so a reloaded page counts from the reload.
+const RunSinceContext = createContext<number | null>(null);
+
+function useElapsedLabel(since: number | null) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (since === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  if (since === null) return undefined;
+  return `${Math.max(0, Math.round((now - since) / 1000))}s`;
+}
+
+// Rendered in the last message's footer, not after the transcript: the top-anchored
+// viewport inserts a spacer right after the streaming reply, which would push anything
+// following the messages down to the composer.
+function AssistantThinking() {
+  const label = useThinkingLabel();
+  const isLast = useAuiState(
+    (state) => state.message.index === state.thread.messages.length - 1,
+  );
+  const since = useContext(RunSinceContext);
+  const elapsed = useElapsedLabel(label !== undefined && isLast ? since : null);
+  if (label === undefined || !isLast) return null;
   return (
-    <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
-      components={{ table: MarkdownTable }}
+    <ThinkingIndicator
+      role="status"
+      aria-label="Generating response"
+      className="mt-2"
+      label={label}
+      elapsed={elapsed}
     />
   );
 }
 
-function Message() {
+function MessageFooter() {
   return (
-    <MessagePrimitive.Root className="message">
-      <MessagePrimitive.Parts
-        components={{
-          Text: MarkdownText,
-          Reasoning: MarkdownText,
-          tools: { Fallback: ToolResult },
-        }}
-      />
+    <>
       <MessageTimestamp />
-    </MessagePrimitive.Root>
+      <AssistantThinking />
+    </>
   );
 }
 
@@ -171,41 +206,97 @@ function MessageTimestamp() {
   );
 }
 
-function ConversationList({
-  threads,
-  selected,
-  busy,
-  select,
-}: {
-  threads: Thread[];
-  selected: string | null;
-  busy: boolean;
-  select: (id: string | null) => void;
-}) {
+type RunFailure = {
+  status: "failed" | "interrupted";
+  contextError?: string | null;
+  retrying: boolean;
+  retry: () => void;
+};
+
+// The failed run belongs to the app's own state, not the assistant-ui runtime.
+const RunFailureContext = createContext<RunFailure | null>(null);
+
+function RunError() {
+  const failure = useContext(RunFailureContext);
+  if (!failure) return null;
   return (
-    <>
-      <button
-        className="new-conversation"
-        disabled={busy}
-        onClick={() => select(null)}
-      >
-        New conversation
-      </button>
-      <nav aria-label="Conversations">
-        {threads.map((thread) => (
-          <button
-            key={thread.id}
-            disabled={busy}
-            aria-current={selected === thread.id ? "page" : undefined}
-            onClick={() => select(thread.id)}
-          >
-            {thread.title}
-          </button>
-        ))}
-      </nav>
-    </>
+    <ErrorState
+      className="max-w-none"
+      title={`Response ${failure.status}`}
+      detail={["Your messages are saved.", failure.contextError]
+        .filter(Boolean)
+        .join(" ")}
+      retrying={failure.retrying}
+      onRetry={failure.retry}
+    />
   );
 }
+
+function TranscriptEnd() {
+  return <RunError />;
+}
+
+function Welcome() {
+  return (
+    <p className="text-muted-foreground mb-6 px-2">
+      Discuss your training. Conversations are saved on this server.
+    </p>
+  );
+}
+
+// The runtime marks every tool call that has a result complete, so a failed call is shown
+// through an error status here; the error replaces the result.
+const ToolCall: ToolCallMessagePartComponent = (part) =>
+  part.isError ? (
+    <ToolFallback
+      {...part}
+      result={undefined}
+      status={{ type: "incomplete", reason: "error", error: part.result }}
+    />
+  ) : (
+    <ToolFallback {...part} />
+  );
+
+const THREAD_COMPONENTS: ThreadComponents = {
+  Welcome,
+  ToolFallback: ToolCall,
+  MessageFooter,
+  TranscriptEnd,
+};
+
+function MemoryMenuButton({ onOpen }: { onOpen: () => void }) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          onClick={() => {
+            setOpenMobile(false);
+            onOpen();
+          }}
+        >
+          <BrainIcon />
+          Memory
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
+// The mobile sheet closes on navigation, as the conversations dialog did.
+function CloseMobileSidebarOn({ value }: { value: unknown }) {
+  const { setOpenMobile } = useSidebar();
+  useEffect(() => setOpenMobile(false), [value, setOpenMobile]);
+  return null;
+}
+
+// The shadcn sidebar stores its collapsed state in this cookie; read it back on load.
+function sidebarOpenFromCookie() {
+  return !document.cookie.split("; ").includes("sidebar_state=false");
+}
+
+const DELETE_CONFIRMATION =
+  "Delete this conversation and all its messages? Shared memory remains. Its source links become unavailable and retry receipts are removed; inspect or forget shared entries in Memory.";
 
 const RECEIPT_NOTICE_MS = 5000;
 
@@ -231,18 +322,17 @@ function App() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [navigation, setNavigation] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const [live, setLive] = useState<{
     threadId: string;
     runId: string;
     message: ThreadMessageLike;
   } | null>(null);
-  const [reconnecting, setReconnecting] = useState(false);
+  const [connection, setConnection] = useState<ConnectionPhase>("online");
   const requestVersion = useRef(0);
   const pendingNewThread = useRef<string | null>(null);
   const selectedRef = useRef(selected);
-  const navigationDialog = useRef<HTMLDialogElement>(null);
-  const actionsPopover = useRef<HTMLDivElement>(null);
-  const memoryDialog = useRef<HTMLDialogElement>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryEntry, setMemoryEntry] = useState<string | null>(null);
   const [receiptNotices, setReceiptNotices] = useState<
@@ -296,15 +386,20 @@ function App() {
     return () => document.removeEventListener("visibilitychange", expire);
   }, []);
 
+  useEffect(() => {
+    // "Resumed" is a brief confirmation, not a resting state.
+    if (connection !== "resumed") return;
+    const timer = setTimeout(() => setConnection("online"), 2000);
+    return () => clearTimeout(timer);
+  }, [connection]);
+
   function openMemory(id: string | null = null) {
     setMemoryEntry(id);
     setMemoryOpen(true);
-    memoryDialog.current?.showModal();
   }
 
   const select = useCallback((id: string | null) => {
-    navigationDialog.current?.close();
-    actionsPopover.current?.hidePopover();
+    setNavigation((count) => count + 1);
     if (id !== null && id === selectedRef.current) return;
     requestVersion.current++;
     pendingNewThread.current = null;
@@ -318,18 +413,6 @@ function App() {
       "",
       id ? `?thread=${encodeURIComponent(id)}` : "/",
     );
-  }, []);
-
-  useEffect(() => {
-    const mobile = window.matchMedia("(max-width: 650px)");
-    const closeMobilePanels = () => {
-      if (!mobile.matches) {
-        navigationDialog.current?.close();
-        actionsPopover.current?.hidePopover();
-      }
-    };
-    mobile.addEventListener("change", closeMobilePanels);
-    return () => mobile.removeEventListener("change", closeMobilePanels);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -374,11 +457,11 @@ function App() {
       }
     };
     source.addEventListener("ready", () => {
-      setReconnecting(false);
+      setConnection((phase) => (phase === "online" ? phase : "resumed"));
       void update();
     });
     source.addEventListener("changed", () => void update());
-    source.onerror = () => setReconnecting(true);
+    source.onerror = () => setConnection("reconnecting");
     return () => {
       stopped = true;
       clearTimeout(timer);
@@ -391,6 +474,12 @@ function App() {
   }, [refresh, selected]);
 
   const runningId = detail?.run?.status === "running" ? detail.run.id : null;
+  // Adjusting state during render: record when this page first saw the current run.
+  const [runSince, setRunSince] = useState<{ id: string; at: number } | null>(
+    null,
+  );
+  if (runningId && runSince?.id !== runningId)
+    setRunSince({ id: runningId, at: Date.now() });
   useEffect(() => {
     if (!selected || !runningId) return;
     const controller = new AbortController();
@@ -430,14 +519,16 @@ function App() {
     };
   }, [selected, runningId, refresh]);
 
-  async function action(fn: () => Promise<void>) {
+  async function action(fn: () => Promise<void>, { rethrow = false } = {}) {
     setBusy(true);
     setError("");
     try {
       await fn();
-      await refresh();
+      await refresh().catch((e) => setError(String(e)));
     } catch (e) {
       setError(String(e));
+      // Lets callers such as inline rename keep their editor open on failure.
+      if (rethrow) throw e;
     } finally {
       setBusy(false);
     }
@@ -479,48 +570,30 @@ function App() {
   }
 
   const running = detail?.run?.status === "running";
-  const conversationList = (
-    <ConversationList
-      threads={threads}
-      selected={selected}
-      busy={busy}
-      select={select}
-    />
-  );
-  const threadActions = detail && (
-    <>
-      <button
-        disabled={busy}
-        onClick={() => {
-          actionsPopover.current?.hidePopover();
-          const title = prompt("Conversation title", detail.title);
-          if (title?.trim())
+  const failedRun =
+    detail?.run?.status === "failed" || detail?.run?.status === "interrupted"
+      ? detail.run.status
+      : null;
+  const runFailure: RunFailure | null =
+    detail && failedRun
+      ? {
+          status: failedRun,
+          contextError: detail.context_error,
+          retrying,
+          retry: () => {
+            if (busy) return;
+            setRetrying(true);
             void action(async () => {
-              await api(`/${detail.id}`, "PATCH", { title });
-            });
-        }}
-      >
-        Rename
-      </button>
-      <button
-        disabled={busy || running}
-        onClick={() => {
-          actionsPopover.current?.hidePopover();
-          if (
-            confirm(
-              "Delete this conversation and all its messages? Shared memory remains. Its source links become unavailable and retry receipts are removed; inspect or forget shared entries in Memory.",
-            )
-          )
-            void action(async () => {
-              await api(`/${detail.id}`, "DELETE");
-              select(null);
-            });
-        }}
-      >
-        Delete
-      </button>
-    </>
-  );
+              watch(
+                await api<Run & { thread_id: string }>(
+                  `/${detail.id}/retry`,
+                  "POST",
+                ),
+              );
+            }).finally(() => setRetrying(false));
+          },
+        }
+      : null;
   const runtime = useExternalStoreRuntime({
     messages: [
       ...messages(detail),
@@ -540,186 +613,150 @@ function App() {
           ...thread,
           status: "regular" as const,
         })),
-        onSwitchToNewThread: () => select(null),
-        onSwitchToThread: select,
+        // Thread-list actions share `busy` with sending; ignore them while one is pending.
+        onSwitchToNewThread: () => {
+          if (!busy) select(null);
+        },
+        onSwitchToThread: (id) => {
+          if (!busy) select(id);
+        },
+        onRename: async (id, title) => {
+          if (busy) throw new Error("Wait for the current action to finish.");
+          if (!title.trim()) return;
+          await action(
+            async () => {
+              await api(`/${id}`, "PATCH", { title });
+            },
+            { rethrow: true },
+          );
+        },
+        onDelete: async (id) => {
+          if (busy) return;
+          if (id === selectedRef.current && running) {
+            setError(
+              "Wait for the response to finish before deleting this conversation.",
+            );
+            return;
+          }
+          if (!confirm(DELETE_CONFIRMATION)) return;
+          await action(async () => {
+            await api(`/${id}`, "DELETE");
+            if (selectedRef.current === id) select(null);
+          });
+        },
       },
     },
   });
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="app">
-        <aside className="sidebar">
-          <h1>Training AI</h1>
-          {conversationList}
-        </aside>
-        <dialog
-          id="conversation-dialog"
-          ref={navigationDialog}
-          className="conversation-dialog"
-          aria-labelledby="conversation-dialog-title"
-          onClick={(event) => {
-            if (event.target === event.currentTarget)
-              navigationDialog.current?.close();
-          }}
+      <RunFailureContext.Provider value={runFailure}>
+        <RunSinceContext.Provider
+          value={runningId && runSince?.id === runningId ? runSince.at : null}
         >
-          <div className="conversation-dialog-header">
-            <h2 id="conversation-dialog-title">Conversations</h2>
-            <button
-              className="icon-button"
-              aria-label="Close conversations"
-              onClick={() => navigationDialog.current?.close()}
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-          {conversationList}
-        </dialog>
-        <main>
-          <header>
-            <button
-              className="icon-button mobile-control"
-              aria-label="Open conversations"
-              aria-haspopup="dialog"
-              aria-controls="conversation-dialog"
-              onClick={() => navigationDialog.current?.showModal()}
-            >
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <path d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h2 title={detail?.title ?? "New conversation"}>
-              {detail?.title ?? "New conversation"}
-            </h2>
-            <button onClick={() => openMemory()}>Memory</button>
-            {detail && (
-              <>
-                <div className="thread-actions">{threadActions}</div>
-                <button
-                  className="icon-button mobile-control"
-                  aria-label="Conversation actions"
-                  popoverTarget="mobile-thread-actions"
-                >
-                  <span aria-hidden="true">⋯</span>
-                </button>
-                <div
-                  ref={actionsPopover}
-                  id="mobile-thread-actions"
-                  className="mobile-thread-actions"
-                  popover="auto"
-                >
-                  {threadActions}
-                </div>
-              </>
-            )}
-          </header>
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          {reconnecting && <p role="status">Reconnecting to server…</p>}
-          <div className="memory-receipts-anchor">
-            <div
-              className="memory-receipts"
-              role="status"
-              aria-label="Memory updates"
-            >
-              {receiptNotices.map(({ key, receipt }) => (
-                <p key={key}>
-                  {receipt.status === "forgotten" ||
-                  receipt.action === "forget" ? (
-                    "Memory forgotten"
-                  ) : (
-                    <button onClick={() => openMemory(receipt.entry_id)}>
-                      {receipt.action === "record"
-                        ? "Remembered"
-                        : receipt.entry?.status === "ended"
-                          ? "Ended"
-                          : "Updated"}
-                      : {receipt.entry?.statement}
-                    </button>
-                  )}
-                  {receipt.status === "superseded" &&
-                    " · Superseded; showing current revision"}
-                </p>
-              ))}
-            </div>
-          </div>
-          {(detail?.run?.status === "failed" ||
-            detail?.run?.status === "interrupted") && (
-            <div role="status" className="run-status">
-              Response {detail.run.status}. Your messages are saved.
-              {detail.context_error && <p>{detail.context_error}</p>}
-              <button
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    watch(
-                      await api<Run & { thread_id: string }>(
-                        `/${detail.id}/retry`,
-                        "POST",
-                      ),
-                    );
-                  })
-                }
-              >
-                Retry response
-              </button>
-            </div>
-          )}
-          <ThreadPrimitive.Root className="thread">
-            <ThreadPrimitive.Viewport className="transcript">
-              <ThreadPrimitive.Empty>
-                <p className="empty">
-                  Discuss your training. Conversations are saved on this server.
-                </p>
-              </ThreadPrimitive.Empty>
-              <ThreadPrimitive.Messages>
-                {() => <Message />}
-              </ThreadPrimitive.Messages>
-              {running && (
-                <p role="status">Generating response… You can return later.</p>
-              )}
-            </ThreadPrimitive.Viewport>
-            <ComposerPrimitive.Root className="composer">
-              <ComposerPrimitive.Input
-                autoFocus
-                submitMode="none"
-                aria-label="Message"
-                placeholder="Ask about your training…"
-              />
-              <ComposerPrimitive.Send>Send</ComposerPrimitive.Send>
-            </ComposerPrimitive.Root>
-          </ThreadPrimitive.Root>
-        </main>
-        <dialog
-          ref={memoryDialog}
-          className="memory-dialog"
-          aria-label="Memory"
-          onClose={() => setMemoryOpen(false)}
-        >
-          {memoryOpen && (
-            <MemoryView
-              key={memoryEntry}
-              entryId={memoryEntry}
-              onClose={() => memoryDialog.current?.close()}
-              onSource={(id) => {
-                memoryDialog.current?.close();
-                select(id);
-              }}
+          <SidebarProvider
+            className="h-dvh min-h-0"
+            defaultOpen={sidebarOpenFromCookie()}
+          >
+            <CloseMobileSidebarOn value={navigation} />
+            <ThreadListSidebar
+              footer={<MemoryMenuButton onOpen={() => openMemory()} />}
             />
-          )}
-        </dialog>
-      </div>
+            <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+              <header className="flex items-center gap-2 border-b px-4 py-3">
+                <SidebarTrigger aria-label="Open conversations" />
+                <h2
+                  className="truncate text-base font-medium"
+                  title={detail?.title ?? "New conversation"}
+                >
+                  {detail?.title ?? "New conversation"}
+                </h2>
+              </header>
+              <div className="flex flex-col gap-2 px-4 pt-3 empty:hidden">
+                {error && (
+                  <ErrorState
+                    className="max-w-none"
+                    title="Something went wrong"
+                    detail={error}
+                    retrying={false}
+                  />
+                )}
+                <ConnectionState
+                  role="status"
+                  className="max-w-none"
+                  phase={connection}
+                />
+              </div>
+              <div className="relative z-10 h-0">
+                <div
+                  className="pointer-events-none absolute top-2 right-4 flex max-w-[min(420px,calc(100%-2rem))] flex-col gap-1.5"
+                  role="status"
+                  aria-label="Memory updates"
+                >
+                  {receiptNotices.map(({ key, receipt }) => (
+                    <Item
+                      key={key}
+                      size="sm"
+                      variant="outline"
+                      className="bg-popover pointer-events-auto shadow-md"
+                    >
+                      <ItemContent className="wrap-anywhere">
+                        <p>
+                          {receipt.status === "forgotten" ||
+                          receipt.action === "forget" ? (
+                            "Memory forgotten"
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-left hover:underline"
+                              onClick={() => openMemory(receipt.entry_id)}
+                            >
+                              {receipt.action === "record"
+                                ? "Remembered"
+                                : receipt.entry?.status === "ended"
+                                  ? "Ended"
+                                  : "Updated"}
+                              : {receipt.entry?.statement}
+                            </button>
+                          )}
+                          {receipt.status === "superseded" &&
+                            " · Superseded; showing current revision"}
+                        </p>
+                      </ItemContent>
+                    </Item>
+                  ))}
+                </div>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ThreadView components={THREAD_COMPONENTS} />
+              </div>
+            </SidebarInset>
+          </SidebarProvider>
+          {/* Outside clicks would discard unsaved corrections; Escape and Close still work. */}
+          <Dialog
+            open={memoryOpen}
+            onOpenChange={setMemoryOpen}
+            disablePointerDismissal
+          >
+            <DialogContent
+              showCloseButton={false}
+              className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
+            >
+              {memoryOpen && (
+                <MemoryView
+                  key={memoryEntry}
+                  entryId={memoryEntry}
+                  onClose={() => setMemoryOpen(false)}
+                  onSource={(id) => {
+                    setMemoryOpen(false);
+                    select(id);
+                  }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+        </RunSinceContext.Provider>
+      </RunFailureContext.Provider>
     </AssistantRuntimeProvider>
   );
 }
