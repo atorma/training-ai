@@ -618,3 +618,17 @@ test("the sidebar remembers being collapsed and ignores its shortcut while typin
   await page.reload();
   await expect(sidebar).toHaveAttribute("data-state", "collapsed");
 });
+
+test("page links served favicon and touch icon", async ({ page, request }) => {
+  await page.goto("/");
+  for (const [rel, type] of [
+    ["icon", "image/svg+xml"],
+    ["apple-touch-icon", "image/png"],
+  ]) {
+    const href = await page.locator(`link[rel="${rel}"]`).getAttribute("href");
+    expect(href).toMatch(/^\/assets\//);
+    const response = await request.get(href!);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain(type);
+  }
+});
