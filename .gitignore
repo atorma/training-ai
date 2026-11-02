@@ -44,8 +44,5 @@ instructions
 .claude
 .agents/
 
-# OpenSpec specs and changes (kept private, like docs/specs/)
-openspec/
-
 # Operating systems
 .DS_Store

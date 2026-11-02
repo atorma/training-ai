@@ -1,0 +1,67 @@
+schema: spec-driven
+
+# Project context: constraints an agent cannot infer from the code.
+# Repository conventions live in AGENTS.md and .agent/rules/; read those too.
+context: |
+  Personal training assistant for a single user. Single-user, single-process app:
+  one server process owns one SQLite database; no multi-tenant or horizontal-scaling designs.
+  Keep data-source support open to providers beyond Intervals.icu (reached via an external
+  MCP server); do not couple specs to one provider's data model.
+  
+  Privacy: OpenSpec artifacts may be committed to a public repository. Never write the user's
+  name or any other personal data (names, emails, usernames, phone numbers, locations, real
+  activity data, health metrics, credentials, authenticated endpoints) in them. Refer to
+  "the user"; use fictional examples only.
+  
+  Application memory (observations, goals, constraints stored by the app) is separate from
+  coding-agent context in .agent/; do not conflate them.
+  
+  Memory principle: passing time is not evidence. Lifecycle changes (ending a constraint,
+  closing a goal) come only from the user; never infer recovery or achievement.
+  
+  Access control is Basic Auth at the Kubernetes ingress; the app itself has no login.
+  
+  Production runs one replica with Recreate strategy and a pre-upgrade SQLite backup.
+  Existing production conversations must be preserved across every upgrade.
+  
+  Behavior docs live in docs/; README.md holds only commands, tables and links.
+  Earlier design plans (pre-OpenSpec) are in docs/specs/ for history.
+
+rules:
+  proposal:
+    - State what is out of scope and which existing data or behavior must be preserved
+    - Flag any deployment, Signal delivery or paid model evaluation as needing explicit approval
+  specs:
+    - Describe observable behavior (HTTP contract, UI behavior, persisted outcomes), not module or class names
+    - Use fictional training examples in scenarios
+  design:
+    - Data is stored in a relational database. When the data model is owned by the application, it should be relational.
+      - JSON is good for transmitting data and for storing data whose model is not owned by the application (e.g.
+        pydantic-ai messages). The application's own data must not be stored in JSON format in relational DB columns.
+        Such a design is difficult to query and schema evolution is even more difficult.
+    - Data model is important. Data stays, application changes. Data model design should not be an implementation 
+      detail but a core part included in design or specs. Use Mermaid diagrams to present relationships between
+      models but don't cram the diagrams full of details. The text provides details. You can use Markdown tables.
+    - "Any schema or persisted-data change goes through the shared append-only migration runner (docs/database-migrations.md): never edit applied migrations"
+    - Name every PK, FK, CHECK, UNIQUE and NOT NULL constraint and index explicitly (pk_, fk_, ck_, uq_, nn_ prefixes)
+    - Give every foreign key a child-side index led by the full FK tuple; reuse covering indexes, do not duplicate them
+    - Audit meaningful uniqueness; do not make dates, timestamps or repeated statements unique merely for indexing
+    - Prefer endpoint handlers calling concrete query/command objects; add service layers only when behavior warrants them
+  tasks:
+    - Each implementation task names the test that proves it
+    - Prefer API tests through the real app with a real temporary SQLite database; no mocked internal collaborators
+    - Cover important UI happy paths with Playwright E2E tests against the real API (make test-e2e)
+    - Additive schema migrations are tested when the developer runs the app locally. They don't need automated tests.
+    - Schema migrations where data must be mutated require automated tests.
+    - Include updating affected docs/ pages (data-model.md, application-components.md, etc.)
+
+operations:
+  apply:
+    guidance:
+      - Run make test and make lint after source changes; run make test-e2e when UI behavior changes
+      - Do not commit, push, deploy or send Signal messages unless the user explicitly authorizes it
+      - Report unrelated test failures instead of silently expanding scope
+      - Before finishing, update .agent/memory.md and append a dated entry to .agent/session-log.md
+  archive:
+    guidance:
+      - Confirm docs/ reflects the archived behavior before archiving
