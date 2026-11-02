@@ -62,10 +62,10 @@ there are never the only copy of an attachment and are removed when processing e
 startup.
 
 Both are one small class each with `put` and `open`, selected in one place; there is no general
-storage layer. In both cases the bytes are written before the
-metadata row commits. Downloads stream through the app, so the existing access path remains the
-only one and the bucket never needs to be reachable from the browser. The client library is
-synchronous, so calls run in a worker thread.
+storage layer. In both cases the bytes are written before the metadata row commits. Downloads
+stream through the app, so the existing access path remains the only one and the bucket never
+needs to be reachable from the browser. The client library is synchronous, so calls run in a
+worker thread.
 
 Tables (one new migration):
 
@@ -173,13 +173,16 @@ with the declared type is rejected. The size limit is enforced while streaming t
   is rewritten.
 - Deployment: a setup script creates the bucket and grants the app's Kubernetes service
   account object create and read access (no delete) through Workload Identity; the app
-  deployment gets that
-  service account and `ATTACHMENT_BUCKET`. Run only with explicit approval.
+  deployment gets that service account and `ATTACHMENT_BUCKET`. The script first checks that
+  Workload Identity is enabled on the cluster and node pool; if not, it stops and prints the
+  commands to enable it, never changing cluster settings itself. Run only with explicit
+  approval.
+- Verification: the migration is additive, so it is checked by upgrading a copy of the local
+  development database and confirming existing threads still load, not by a new pytest
+  migration test.
 - Rollback: manual action needed. Either restore pre-upgrade backup and lose later writes
   or roll forward with a fix. The bucket is left in place.
 
 ## Open Questions
 
-- Whether the cluster already has Workload Identity enabled, or the setup script must enable
-  it.
 - Exact chip and drag-and-drop styling, which follows the ongoing UI style renewal.
