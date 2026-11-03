@@ -35,12 +35,15 @@ TODAY = date(2026, 10, 15)
 
 
 @pytest.fixture
-def memory_client():
+def memory_client(monkeypatch):
     with TestClient(
         create_conversation_app(
             Agent(TestModel(call_tools=[])), database_path=os.getenv("DATABASE_PATH")
         )
     ) as client:
+        # Statuses from the API and from prepared turns must use the same fixed date.
+        store = client.app.state.memory_store
+        monkeypatch.setattr(store, "_today", lambda: TODAY.isoformat())
         yield client
 
 
