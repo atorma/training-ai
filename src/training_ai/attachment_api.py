@@ -90,7 +90,7 @@ def attachment_routes(store: ConversationStore, byte_store: ByteStore) -> list[R
             if size == 0:
                 return JSONResponse({"error": "The file is empty."}, 400)
             try:
-                await asyncio.to_thread(byte_store.put, sha256, file.file)
+                await asyncio.to_thread(byte_store.put, sha256, file.file, detected)
             except StoreUnavailable:
                 logger.warning("Attachment upload could not be stored")
                 return unavailable()

@@ -94,7 +94,7 @@ chosen at startup in `create_byte_store`:
 
 | Setting | Store |
 | --- | --- |
-| `ATTACHMENT_BUCKET` set | Private Google Cloud Storage bucket, optional `ATTACHMENT_PREFIX`. Writes use a "create only if absent" precondition. Credentials come from Application Default Credentials (Workload Identity in GKE). |
+| `ATTACHMENT_BUCKET` set | Private Google Cloud Storage bucket, optional `ATTACHMENT_PREFIX`. Writes use a "create only if absent" precondition and set the object's content type to the detected media type. Credentials come from Application Default Credentials (Workload Identity in GKE). |
 | Otherwise | `ATTACHMENT_DIR`, default `attachments/` next to `DATABASE_PATH`. Writes go to `.tmp/` and are renamed into place; `.tmp/` is cleared at startup. |
 
 Both are small synchronous classes with `put` and `open`, called in a worker thread. Bytes are

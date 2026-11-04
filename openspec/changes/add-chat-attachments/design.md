@@ -50,8 +50,10 @@ Bytes are stored under the key `<sha256[0:2]>/<sha256>` in a byte store chosen a
 - `ATTACHMENT_BUCKET` set: a private Google Cloud Storage bucket (uniform bucket-level access,
   public access prevention, same region as the cluster), with optional `ATTACHMENT_PREFIX`.
   Writes use a "create only if absent" precondition, so concurrent identical uploads are
-  harmless. The app authenticates with Application Default Credentials through GKE Workload
-  Identity; no key files.
+  harmless. Objects carry the detected media type as their content type, for anyone inspecting
+  the bucket. The app doesn't read it; downloads and model requests take the type from the
+  `attachments` row. The app authenticates with Application Default Credentials through GKE
+  Workload Identity; no key files.
 - Otherwise: a local directory `ATTACHMENT_DIR` (default `attachments/` next to
   `DATABASE_PATH`). Writes go to a temporary file in the same directory and are renamed into
   place.

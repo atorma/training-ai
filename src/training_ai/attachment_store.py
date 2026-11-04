@@ -32,7 +32,7 @@ class StoreUnavailable(Exception):
 
 
 class ByteStore(Protocol):
-    def put(self, sha256: str, source: BinaryIO) -> None: ...
+    def put(self, sha256: str, source: BinaryIO, media_type: str) -> None: ...
 
     def open(self, sha256: str) -> BinaryIO: ...
 
@@ -42,7 +42,10 @@ def object_key(sha256: str) -> str:
 
 
 class LocalByteStore:
-    """Files under `root/<sha[0:2]>/<sha>`, written through a temporary file and renamed."""
+    """Files under `root/<sha[0:2]>/<sha>`, written through a temporary file and renamed.
+
+    Plain files keep no media type; the metadata row is what serves it.
+    """
 
     def __init__(self, root: str | Path):
         self.root = Path(root)
@@ -51,7 +54,7 @@ class LocalByteStore:
     def remove_temporary_files(self) -> None:
         shutil.rmtree(self.work, ignore_errors=True)
 
-    def put(self, sha256: str, source: BinaryIO) -> None:
+    def put(self, sha256: str, source: BinaryIO, media_type: str) -> None:
         target = self.root / object_key(sha256)
         if target.exists():
             return
@@ -81,7 +84,10 @@ class LocalByteStore:
 
 
 class GcsByteStore:
-    """Objects in a private bucket, created only if absent so identical uploads are harmless."""
+    """Objects in a private bucket, created only if absent so identical uploads are harmless.
+
+    Identical bytes have one detected media type, so the type set by the first upload holds.
+    """
 
     def __init__(self, bucket: str, prefix: str = "", client=None):
         from google.cloud import storage
@@ -97,7 +103,7 @@ class GcsByteStore:
         key = object_key(sha256)
         return f"{self.prefix}/{key}" if self.prefix else key
 
-    def put(self, sha256: str, source: BinaryIO) -> None:
+    def put(self, sha256: str, source: BinaryIO, media_type: str) -> None:
         from google.api_core.exceptions import PreconditionFailed
 
         blob = self.bucket.blob(self._name(sha256))
@@ -105,7 +111,7 @@ class GcsByteStore:
             source.seek(0)
             blob.upload_from_file(
                 source,
-                content_type="application/octet-stream",
+                content_type=media_type,
                 if_generation_match=0,
                 timeout=GCS_TIMEOUT,
                 retry=self.retry,
@@ -171,8 +177,8 @@ class _UnavailableUntilReachable:
                 raise StoreUnavailable("Attachment storage is unavailable.") from exc
         return self.store
 
-    def put(self, sha256: str, source: BinaryIO) -> None:
-        self._get().put(sha256, source)
+    def put(self, sha256: str, source: BinaryIO, media_type: str) -> None:
+        self._get().put(sha256, source, media_type)
 
     def open(self, sha256: str) -> BinaryIO:
         return self._get().open(sha256)

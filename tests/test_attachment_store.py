@@ -14,11 +14,11 @@ SHA = hashlib.sha256(CONTENT).hexdigest()
 
 
 def exercise_store(store):
-    store.put(SHA, io.BytesIO(CONTENT))
+    store.put(SHA, io.BytesIO(CONTENT), "application/pdf")
     with store.open(SHA) as handle:
         assert handle.read() == CONTENT
     # Identical bytes are written once; a second put succeeds without changing them.
-    store.put(SHA, io.BytesIO(CONTENT))
+    store.put(SHA, io.BytesIO(CONTENT), "application/pdf")
     with store.open(SHA) as handle:
         assert handle.read() == CONTENT
     with pytest.raises(MissingContent):
@@ -34,7 +34,7 @@ def test_local_store_writes_reads_and_deduplicates(tmp_path):
 
 def test_local_store_keeps_existing_bytes_and_removes_leftover_temporary_files(tmp_path):
     store = LocalByteStore(tmp_path)
-    store.put(SHA, io.BytesIO(CONTENT))
+    store.put(SHA, io.BytesIO(CONTENT), "application/pdf")
     leftover = tmp_path / ".tmp" / "interrupted-write"
     leftover.write_bytes(b"partial")
     store.remove_temporary_files()
@@ -57,4 +57,6 @@ def test_gcs_store_against_emulator():
     store = GcsByteStore(bucket.name, "chat/", client=client)
     store.check()
     exercise_store(store)
-    assert [blob.name for blob in client.list_blobs(bucket.name)] == [f"chat/{SHA[:2]}/{SHA}"]
+    blobs = list(client.list_blobs(bucket.name))
+    assert [blob.name for blob in blobs] == [f"chat/{SHA[:2]}/{SHA}"]
+    assert blobs[0].content_type == "application/pdf"
