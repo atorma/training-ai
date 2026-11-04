@@ -9,9 +9,11 @@ description = "Using OpenAI to do something with sports training data."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "google-cloud-storage>=3.17.1",
   "pydantic-ai==2.55.0",
   "pydantic-ai-slim[web]==2.55.0",
   "python-dotenv>=1.2.1",
+  "python-multipart>=0.0.21",
   "uvicorn>=0.29.0",
 ]
 
@@ -33,8 +35,9 @@ packages = ["training_ai"]
 training_ai = ["web_assets/static/index.html", "web_assets/static/assets/*"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -m 'not integration'"
 testpaths = ["tests"]
+markers = ["integration: needs a local service such as the storage emulator; see make test-integration"]
 
 [tool.ruff]
 target-version = "py312"
@@ -42,3 +45,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[[tool.mypy.overrides]]
+# google-cloud-storage ships without type information.
+module = ["google.cloud", "google.cloud.*"]
+ignore_missing_imports = true

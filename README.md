@@ -76,6 +76,7 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 | `make hooks` | Run pre-commit hooks, including new unstaged, nonignored files. |
 | `make test` | Run fast Python tests. |
 | `make test-e2e` | Run browser tests against the real API and temporary SQLite. |
+| `make test-integration` | Run integration tests against a local storage emulator in Docker. |
 | `make eval-memory EVAL_MODEL=provider:model` | Opt-in live-model memory evaluation with fictional data. |
 | `make install-browser` | Reinstall Chromium if needed. |
 

@@ -8,11 +8,12 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 from uuid import uuid4
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 
+from training_ai import attachments
 from training_ai.database_migrations import migrate
 
 RunStatus = Literal["running", "completed", "failed", "interrupted"]
@@ -37,6 +38,7 @@ class Run(TypedDict):
 class StoredMessage(TypedDict):
     sequence: int
     payload: dict[str, Any]  # One PydanticAI message in its JSON form.
+    attachments: NotRequired[list[attachments.Attachment]]  # Only on user messages with files.
 
 
 class ThreadDetail(Thread):
@@ -147,6 +149,10 @@ class ConversationStore:
                 **thread, messages=messages, run=cast(Run, dict(run)) if run else None
             )
 
+    def message_attachments(self, thread_id) -> dict[int, list[attachments.Attachment]]:
+        with self.connection() as db:
+            return attachments.for_thread(db, thread_id)
+
     def rename_thread(self, thread_id, title):
         with self.connection() as db:
             self._require_thread(db, thread_id)
@@ -165,7 +171,8 @@ class ConversationStore:
                 raise RunConflict("Wait for the response to finish before deleting this thread.")
             db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
 
-    def start_run(self, thread_id, text=None) -> Run:
+    def start_run(self, thread_id, text=None, attachment_ids=()) -> Run:
+        """Commit the prompt, its attachment links and a running run; `None` text retries."""
         timestamp = now()
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -192,11 +199,10 @@ class ConversationStore:
                     "INSERT INTO messages (thread_id, sequence, payload) VALUES (?, ?, ?)",
                     (thread_id, sequence, json.dumps(json.loads(payload)[0])),
                 )
+                names = attachments.link(db, thread_id, sequence, attachment_ids)
                 if sequence == 1:
-                    db.execute(
-                        "UPDATE threads SET title = ? WHERE id = ?",
-                        (" ".join(text.split())[:80], thread_id),
-                    )
+                    title = " ".join(text.split())[:80] or " ".join(names[0].split())[:80]
+                    db.execute("UPDATE threads SET title = ? WHERE id = ?", (title, thread_id))
             run: Run = {
                 "id": str(uuid4()),
                 "thread_id": thread_id,

@@ -2,7 +2,8 @@
 
 The manifests deploy one Python server with SQLite on GKE, with separate Kustomize roots:
 
-- `deployment/k8s/app/`: Deployment, Service, Ingress, Certificate, and summary CronJob.
+- `deployment/k8s/app/`: Deployment, ServiceAccount, Service, Ingress, Certificate, and summary
+  CronJob.
 - `deployment/k8s/storage/`: PersistentVolumeClaim and StorageClass.
 - `deployment/k8s/intervals-mcp/`: the Intervals.icu MCP server the application calls.
 
@@ -47,6 +48,40 @@ The same resource names are preserved, so existing storage can be reused after t
 The cluster must have the Persistent Disk CSI driver enabled, compatible nodes in
 `europe-west1-b`, and permissions to create the cluster-scoped StorageClass. These requirements
 have not been checked against the live cluster. See [GKE CSI documentation](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gce-pd-csi-driver).
+
+## Attachment storage
+
+Chat attachment bytes live in a private Google Cloud Storage bucket, not on the volume. The
+server reaches it as the `training-ai` Kubernetes service account through Workload Identity,
+with Application Default Credentials and no key files.
+
+Run `sh deployment/setup-attachments.sh` once before deploying this feature, with explicit
+approval, because it creates cloud resources. It reads `GCLOUD_PROJECT_ID`, `GKE_CLUSTER`,
+`ATTACHMENT_BUCKET` and optionally `GKE_LOCATION` (default `europe-west1-b`) from
+`deployment/.env`, and uses the current kubectl namespace. The script:
+
+1. Checks that Workload Identity is enabled on the cluster and that every node pool uses the
+   GKE metadata server. If not, it prints the `gcloud` commands that enable them and stops.
+   It never changes cluster settings itself; updating a node pool recreates its nodes.
+2. Creates the bucket in the cluster's region with uniform bucket-level access and public
+   access prevention, or enforces both on an existing bucket.
+3. Grants the service account `roles/storage.objectCreator` and `roles/storage.objectViewer`
+   on the bucket only: it can create and read objects but not delete or overwrite them.
+
+`deployment/deploy.sh` requires `ATTACHMENT_BUCKET` and passes it to the server through a
+generated `training-ai-attachments` ConfigMap. If the bucket is unreachable at startup, the
+server logs a warning and still starts: text chat works, and uploads, downloads and runs that
+need attachment content fail with a storage error until access is fixed. Check access first
+when attachments fail after a deploy.
+
+Data that stays outside the database lifecycle:
+
+- Pre-upgrade backups copy SQLite only, not attachment bytes. Migrations never touch stored
+  bytes and the app never deletes them, so a restored database finds every file it refers to.
+- Deleting a thread removes its attachments from the app, but the bytes stay in the bucket.
+  They may be health-related; they stay private until a later cleanup change removes
+  unreferenced data. Abandoned unsent uploads also stay until then.
+- Upload staging uses the container's temporary directory; nothing is kept on the volume.
 
 ## Rollouts and migrations
 
@@ -99,6 +134,8 @@ not undo migrations; an older image rejects a newer database. For a restore:
    summary CronJob. Restoring loses writes made after the backup.
 
 Restore operations are deliberate maintenance; no automatic restore script is provided.
+Rolling back the attachment feature is also manual: either restore the pre-upgrade backup and
+lose later writes, or roll forward with a fix. The bucket and its objects are left in place.
 If there are chats on an existing pod's container filesystem, export them consistently before
 the first rollout with this PVC. Mounting a new volume does not copy the old container data.
 

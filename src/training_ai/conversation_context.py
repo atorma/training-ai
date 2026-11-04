@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
+from training_ai import attachments
+from training_ai.attachments import Attachment
 from training_ai.memory_context import (
     Pool,
     Selection,
@@ -58,6 +60,8 @@ class PreparedTurn:
     receipts: list[Payload]
     observations: Pool
     history: HistoryPool
+    # The current message's attachments; the caller loads their bytes into the last message.
+    attachments: list[Attachment] = field(default_factory=list)
 
     def required_payload(self) -> dict[str, list]:
         return required_payload(self.required, self.receipts)
@@ -137,12 +141,16 @@ def add_receipts(selection: Selection, required: Pool, source: MemorySource) -> 
     return receipts
 
 
-def load_turns(db: sqlite3.Connection, source: MemorySource) -> tuple[list[Turn], Payload]:
-    """Completed earlier turns as (sequence, payload) lists, and the current message payload."""
+def load_turns(
+    db: sqlite3.Connection, source: MemorySource
+) -> tuple[list[Turn], Payload, list[Attachment]]:
+    """Completed earlier turns as (sequence, payload) lists, the current message payload and its
+    attachments. Earlier attachments become placeholder text, never content."""
     rows = db.execute(
         "SELECT sequence, payload FROM messages WHERE thread_id=? AND sequence<=? ORDER BY sequence",
         (source.thread_id, source.sequence),
     ).fetchall()
+    files = attachments.for_thread(db, source.thread_id)
     turns: list[Turn] = []
     current: Payload | None = None
     for row in rows:
@@ -150,6 +158,7 @@ def load_turns(db: sqlite3.Connection, source: MemorySource) -> tuple[list[Turn]
         if row["sequence"] == source.sequence:
             current = payload
             break
+        payload = attachments.with_placeholders(payload, files.get(row["sequence"], []))
         if any(p["part_kind"] == "user-prompt" for p in payload["parts"]):
             turns.append([])
         if turns:
@@ -168,7 +177,7 @@ def load_turns(db: sqlite3.Connection, source: MemorySource) -> tuple[list[Turn]
         for turn in turns
         if turn[0][0] in completed_sources and _complete([p for _, p in turn])
     ]
-    return completed, current
+    return completed, current, files.get(source.sequence, [])
 
 
 def turn_refs(db: sqlite3.Connection, thread_id: str, turn: Turn) -> set[str]:
@@ -233,7 +242,7 @@ def prepare_turn(
         observations = select_observations(
             selection, limits.observation_days, limits.observation_budget
         )
-        turns, current = load_turns(snapshot.db, source)
+        turns, current, current_files = load_turns(snapshot.db, source)
         history, selected = select_history(selection, source, turns, limits.history_budget)
     messages = selected + ModelMessagesTypeAdapter.validate_python([current])
-    return PreparedTurn(messages, required, receipts, observations, history)
+    return PreparedTurn(messages, required, receipts, observations, history, current_files)

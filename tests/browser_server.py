@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from pydantic_ai import Agent, models
-from pydantic_ai.messages import ModelMessagesTypeAdapter
+from pydantic_ai.messages import BinaryContent, ModelMessagesTypeAdapter
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
@@ -18,9 +18,21 @@ models.ALLOW_MODEL_REQUESTS = False
 failed_prompts = set()
 
 
+def prompt_text(content):
+    """Text prompts as-is; attachment parts as their labels and received byte counts."""
+    if isinstance(content, str):
+        return content
+    return " ".join(
+        f"received {c.media_type} {len(c.data)} bytes" if isinstance(c, BinaryContent) else c
+        for c in content
+    )
+
+
 async def respond(messages, info):
     await asyncio.sleep(0.2)
-    prompts = [p.content for m in messages for p in m.parts if p.part_kind == "user-prompt"]
+    prompts = [
+        prompt_text(p.content) for m in messages for p in m.parts if p.part_kind == "user-prompt"
+    ]
     examples = {
         "Remember synthetic ankle soreness": {
             "kind": "observation",

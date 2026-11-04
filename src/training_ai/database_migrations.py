@@ -356,11 +356,58 @@ def shared_training_memory(db: Connection) -> None:
     """)
 
 
+def chat_attachments(db: Connection) -> None:
+    """Attachment metadata; the bytes live in a content-addressed byte store."""
+    db.execute("""
+        CREATE TABLE attachment_contents (
+            sha256 TEXT CONSTRAINT pk_attachment_contents PRIMARY KEY
+                CONSTRAINT nn_attachment_contents_sha256 NOT NULL
+                CONSTRAINT ck_attachment_contents_sha256 CHECK (length(sha256) = 64),
+            size_bytes INTEGER CONSTRAINT nn_attachment_contents_size_bytes NOT NULL
+                CONSTRAINT ck_attachment_contents_size_bytes CHECK (size_bytes > 0),
+            created_at TEXT CONSTRAINT nn_attachment_contents_created_at NOT NULL
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE TABLE attachments (
+            id TEXT CONSTRAINT pk_attachments PRIMARY KEY CONSTRAINT nn_attachments_id NOT NULL,
+            content_sha256 TEXT CONSTRAINT nn_attachments_content_sha256 NOT NULL,
+            file_name TEXT CONSTRAINT nn_attachments_file_name NOT NULL
+                CONSTRAINT ck_attachments_file_name CHECK (length(file_name) BETWEEN 1 AND 255),
+            media_type TEXT CONSTRAINT nn_attachments_media_type NOT NULL
+                CONSTRAINT ck_attachments_media_type CHECK (
+                    media_type IN ('application/pdf', 'image/png', 'image/jpeg', 'image/webp')
+                ),
+            size_bytes INTEGER CONSTRAINT nn_attachments_size_bytes NOT NULL
+                CONSTRAINT ck_attachments_size_bytes CHECK (size_bytes > 0),
+            uploaded_at TEXT CONSTRAINT nn_attachments_uploaded_at NOT NULL,
+            thread_id TEXT,
+            message_sequence INTEGER,
+            position INTEGER CONSTRAINT ck_attachments_position CHECK (position >= 0),
+            CONSTRAINT fk_attachments_content FOREIGN KEY (content_sha256)
+                REFERENCES attachment_contents(sha256) ON DELETE RESTRICT,
+            CONSTRAINT fk_attachments_message FOREIGN KEY (thread_id, message_sequence)
+                REFERENCES messages(thread_id, sequence) ON DELETE CASCADE,
+            CONSTRAINT ck_attachments_message_link CHECK (
+                (thread_id IS NULL AND message_sequence IS NULL AND position IS NULL)
+                OR (thread_id IS NOT NULL AND message_sequence IS NOT NULL
+                    AND position IS NOT NULL)
+            )
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE UNIQUE INDEX uq_attachments_message_position
+            ON attachments(thread_id, message_sequence, position)
+    """)
+    db.execute("CREATE INDEX attachments_by_content ON attachments(content_sha256)")
+
+
 # Position is the schema version: append migrations; never reorder or edit applied ones.
 MIGRATIONS = (
     initial_schema,
     Migration(_conversation_naming, suspend_foreign_keys=True),
     shared_training_memory,
+    chat_attachments,
 )
 
 

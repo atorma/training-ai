@@ -80,7 +80,7 @@ stateDiagram-v2
 | Setting | Current implementation |
 | --- | --- |
 | File | `DATABASE_PATH`, default `data/conversations.sqlite3` |
-| SQLite | WAL mode, foreign keys enabled, schema `user_version = 3` |
+| SQLite | WAL mode, foreign keys enabled, schema `user_version = 4` |
 | Process ownership | Adjacent `.lock` file; one server process/worker per database |
 | Scope | Web conversations and shared memory; `/summary` output remains separate |
 
@@ -93,6 +93,46 @@ runner at startup under the process ownership lock. Migration 2 names existing c
 constraints while preserving saved values, payload text and row ordering. See [database
 migrations](database-migrations.md) for the required workflow, transaction rules, tests, and
 deployment recovery.
+
+## Chat attachments
+
+Migration 4 adds attachment metadata. Bytes never enter SQLite or message payloads; they live in
+a content-addressed byte store (see [application components](application-components.md)).
+
+```mermaid
+erDiagram
+    attachment_contents ||--o{ attachments : "shared by"
+    messages |o--o{ attachments : carries
+
+    attachment_contents {
+        TEXT sha256 PK "Hex SHA-256 of the bytes"
+        INTEGER size_bytes
+        TEXT created_at "UTC ISO 8601"
+    }
+    attachments {
+        TEXT id PK "UUID"
+        TEXT content_sha256 FK
+        TEXT file_name "Original name, 1-255 characters"
+        TEXT media_type "PDF, PNG, JPEG or WebP"
+        INTEGER size_bytes
+        TEXT uploaded_at "UTC ISO 8601"
+        TEXT thread_id FK "Null until sent"
+        INTEGER message_sequence FK "Null until sent"
+        INTEGER position "Order within the message"
+    }
+```
+
+| Rule | Behavior |
+| --- | --- |
+| Content sharing | Identical bytes are one `attachment_contents` row and one stored object; each upload is its own attachment. |
+| Unsent upload | Link columns all null (`ck_attachments_message_link`). Removing the composer chip deletes the row. |
+| Sent attachment | Linked to the user message in the send transaction; position is unique per message. |
+| Child FK indexes | `uq_attachments_message_position` covers the message link; `attachments_by_content` covers the content link. |
+| Thread deletion | Cascades to the attachment rows of its messages. |
+| No cleanup yet | Content rows, stored bytes and abandoned unsent uploads are never deleted. A later change will remove unreferenced data. |
+
+Deleted threads' attachments are no longer reachable through the app, but their bytes, which may
+be health-related, stay in the private store until that cleanup exists.
 
 ## Shared training memory
 

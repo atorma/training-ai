@@ -43,7 +43,7 @@ def test_every_foreign_key_has_parent_unique_and_full_child_index(memory_client)
                 assert any(index[: len(child)] == child for index in indexes(table)), (table, child)
                 assert parent in indexes(rows[0][2], unique=True), (table, parent)
                 total += 1
-        assert total == 7
+        assert total == 9
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 

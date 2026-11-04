@@ -6,6 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from pydantic_ai import AgentRunResultEvent
@@ -14,6 +15,9 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
+from training_ai import attachments
+from training_ai.attachment_api import attachment_routes
+from training_ai.attachment_store import ByteStore, LocalByteStore, MissingContent, StoreUnavailable
 from training_ai.conversation_context import prepare_turn
 from training_ai.conversation_events import SSE_HEADERS, ConversationEvents, RunStream
 from training_ai.conversation_store import (
@@ -46,8 +50,10 @@ def create_conversation_app(
     database_path,
     timezone="UTC",
     limits: MemoryLimits | None = None,
+    byte_store: ByteStore | None = None,
 ):
     store = ConversationStore(database_path)
+    byte_store = byte_store or LocalByteStore(Path(database_path).parent / "attachments")
     limits = limits or MemoryLimits()
     zone = ZoneInfo(timezone)
     tasks = set()
@@ -72,20 +78,37 @@ def create_conversation_app(
             )
             prepared = prepare_turn(memory, source, datetime.now(zone).date(), limits)
             deps = ConversationMemoryDeps(memory, source, compact(prepared.context))
+            messages = prepared.messages
+            if prepared.attachments:
+                contents = [
+                    await asyncio.to_thread(read_bytes, a["content_sha256"])
+                    for a in prepared.attachments
+                ]
+                messages = [
+                    *messages[:-1],
+                    attachments.with_content(messages[-1], prepared.attachments, contents),
+                ]
             async with agent.run_stream_events(
-                message_history=prepared.messages,
+                message_history=messages,
                 deps=deps,
                 conversation_id=run["thread_id"],
                 run_id=run["id"],
             ) as stream:
                 async for event in stream:
                     if isinstance(event, AgentRunResultEvent):
-                        store.finish_run(run["id"], "completed", event.result.new_messages())
+                        new = attachments.without_content(event.result.new_messages())
+                        store.finish_run(run["id"], "completed", new)
                     yield event
         except MemoryContextLimit as exc:
             context_errors[run["thread_id"]] = (run["id"], str(exc))
             store.finish_run(run["id"], "failed")
             raise RuntimeError(str(exc)) from None
+        except (MissingContent, StoreUnavailable):
+            message = "Attachment storage is unavailable. Retry when it is reachable."
+            context_errors[run["thread_id"]] = (run["id"], message)
+            logger.warning("Conversation run %s could not read its attachments", run["id"])
+            store.finish_run(run["id"], "failed")
+            raise RuntimeError(message) from None
         except asyncio.CancelledError:
             store.finish_run(run["id"], "interrupted")
             raise
@@ -94,6 +117,10 @@ def create_conversation_app(
             logger.warning("Conversation run %s failed", run["id"])
             store.finish_run(run["id"], "failed")
             raise RuntimeError("Response failed. Your messages are saved.") from None
+
+    def read_bytes(sha256: str) -> bytes:
+        with byte_store.open(sha256) as handle:
+            return handle.read()
 
     async def generate(run, stream):
         try:
@@ -180,13 +207,42 @@ def create_conversation_app(
         receipts = memory.receipts(thread_id)
         if receipts:
             detail["memory_receipts"] = receipts
+        files = store.message_attachments(thread_id)
+        for message in detail["messages"]:
+            if message["sequence"] in files:
+                message["attachments"] = files[message["sequence"]]
         return JSONResponse(detail)
 
     async def send(request):
-        text = await text_field(request, "text", 1000000, strip=False)
-        if text is None:
-            return JSONResponse({"error": "Provide a message of 1–1000000 characters."}, 400)
-        run = store.start_run(request.path_params["thread_id"], text)
+        invalid = JSONResponse(
+            {
+                "error": "Provide a message of at most 1000000 characters, "
+                f"with text or 1–{attachments.MAX_PER_MESSAGE} attachments."
+            },
+            400,
+        )
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            return invalid
+        if not isinstance(body, dict):
+            return invalid
+        text = body.get("text", "")
+        ids = body.get("attachment_ids", [])
+        if (
+            not isinstance(text, str)
+            or len(text) > 1000000
+            or not isinstance(ids, list)
+            or not all(isinstance(i, str) for i in ids)
+            or len(ids) > attachments.MAX_PER_MESSAGE
+            or len(set(ids)) != len(ids)
+            or (not text.strip() and not ids)
+        ):
+            return invalid
+        try:
+            run = store.start_run(request.path_params["thread_id"], text, ids)
+        except attachments.InvalidAttachments as exc:
+            return JSONResponse({"error": str(exc)}, 400)
         launch(run)
         return JSONResponse(run, 202)
 
@@ -224,6 +280,7 @@ def create_conversation_app(
         lifespan=lifespan,
         routes=[
             *memory_routes(memory),
+            *attachment_routes(store, byte_store),
             Route("/api/health", health),
             Route("/api/events", changes),
             Route("/api/threads", threads, methods=["GET", "POST"]),

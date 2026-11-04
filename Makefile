@@ -5,7 +5,7 @@ NPM ?= npm
 .PHONY: lint lint-fix hooks
 .PHONY: build build-web build-docker
 .PHONY: run-web dev-web run-mcp
-.PHONY: test test-e2e eval-memory
+.PHONY: test test-e2e test-integration eval-memory
 .PHONY: render-k8s render-k8s-storage render-k8s-mcp build-and-deploy-k8s deploy-k8s-mcp
 
 bootstrap:
@@ -73,6 +73,16 @@ test:
 
 test-e2e: build-web
 	$(UV) run --locked --all-extras $(NPM) run test-e2e
+
+# Integration tests against a local Google Cloud Storage emulator in Docker; no cloud access.
+GCS_EMULATOR_IMAGE = fsouza/fake-gcs-server:1.52.2
+GCS_EMULATOR_PORT ?= 4443
+test-integration:
+	@cid=$$(docker run -d --rm -p 127.0.0.1:$(GCS_EMULATOR_PORT):4443 $(GCS_EMULATOR_IMAGE) \
+		-scheme http -public-host 127.0.0.1:$(GCS_EMULATOR_PORT)) || exit 1; \
+	trap 'docker stop $$cid >/dev/null' EXIT; \
+	for i in $$(seq 50); do curl -sf http://127.0.0.1:$(GCS_EMULATOR_PORT)/storage/v1/b >/dev/null && break; sleep 0.2; done; \
+	STORAGE_EMULATOR_HOST=http://127.0.0.1:$(GCS_EMULATOR_PORT) $(UV) run --locked pytest -m integration
 
 # Opt-in paid provider calls using fictional data and temporary SQLite; no external MCP.
 eval-memory:

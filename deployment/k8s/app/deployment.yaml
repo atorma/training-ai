@@ -18,6 +18,7 @@ spec:
       labels:
         app: training-ai
     spec:
+      serviceAccountName: training-ai
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsUser: 1000
@@ -89,6 +90,14 @@ spec:
           env:
             - name: DATABASE_PATH
               value: /app/data/conversations.sqlite3
+            # Private Google Cloud Storage bucket; deploy.sh fills this config map.
+            - name: ATTACHMENT_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: training-ai-attachments
+                  key: ATTACHMENT_BUCKET
+            - name: ATTACHMENT_PREFIX
+              value: attachments
             - name: TIMEZONE
               value: Europe/Helsinki
             - name: MODEL

@@ -5,6 +5,7 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.staticfiles import StaticFiles
 
+from training_ai.attachment_store import create_byte_store
 from training_ai.config import Config
 from training_ai.conversation_api import create_conversation_app
 from training_ai.signal_sender import build_signal_sender
@@ -19,7 +20,11 @@ def create_app(config: Config) -> Starlette:
 
     conversation_agent = create_conversation_agent(config)
     app = create_conversation_app(
-        conversation_agent, config.database_path, config.timezone, config.memory_limits()
+        conversation_agent,
+        config.database_path,
+        config.timezone,
+        config.memory_limits(),
+        create_byte_store(config),
     )
     app.state.conversation_agent = conversation_agent
     app.state.config = config

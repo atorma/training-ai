@@ -36,6 +36,7 @@ Use Make targets for development tasks.
 - `make test` - run fast pytest tests; browser/Playwright tests are separate.
 - `make install-browser` - reinstall Chromium separately; bootstrap includes installation.
 - `make test-e2e` - test browser flows against the real local API and temporary SQLite.
+- `make test-integration` - run `integration`-marked tests against a local GCS emulator (Docker).
 
 ## Coding Style & Naming Conventions
 

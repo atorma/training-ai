@@ -1,3 +1,5 @@
+import type { ServerAttachment } from "./attachments";
+
 export type Thread = {
   id: string;
   title: string;
@@ -18,6 +20,7 @@ export type Detail = Thread & {
   messages: {
     sequence: number;
     payload: { kind: string; timestamp?: string | null; parts: Part[] };
+    attachments?: ServerAttachment[];
   }[];
   run: {
     id: string;

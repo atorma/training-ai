@@ -11,6 +11,7 @@ import {
   AssistantRuntimeProvider,
   MessageNotSentError,
   useExternalStoreRuntime,
+  useAuiEvent,
   useAuiState,
   type AppendMessage,
   type ThreadMessageLike,
@@ -26,6 +27,13 @@ import {
   type Thread,
 } from "./api";
 import { readRun } from "./stream";
+import {
+  downloadAttachment,
+  messageAttachmentItems,
+  ServerAttachmentAdapter,
+  type ServerAttachment,
+} from "./attachments";
+import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 import { MemoryView } from "./memory";
 import {
   ConnectionState,
@@ -79,6 +87,8 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
       Exclude<ThreadMessageLike["content"], string>[number]
     > = [];
     for (const p of m.payload.parts) {
+      // An attachment-only message saves empty text; its chips stand alone.
+      if (p.part_kind === "user-prompt" && p.content === "") continue;
       if (
         (p.part_kind === "text" ||
           p.part_kind === "user-prompt" ||
@@ -107,7 +117,8 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
         });
       }
     }
-    if (!content.length) return [];
+    const attachments = m.attachments ?? [];
+    if (!content.length && !attachments.length) return [];
     const timestamp =
       m.payload.timestamp ??
       m.payload.parts.find((p) => p.timestamp)?.timestamp;
@@ -119,7 +130,7 @@ function messages(detail: Detail | null): ThreadMessageLike[] {
         role: m.payload.kind === "response" ? "assistant" : "user",
         content,
         createdAt: hasTimestamp ? createdAt : undefined,
-        metadata: { custom: { hasTimestamp } },
+        metadata: { custom: { hasTimestamp, attachments } },
       },
     ];
   });
@@ -182,6 +193,34 @@ function MessageFooter() {
       <MessageTimestamp />
       <AssistantThinking />
     </>
+  );
+}
+
+/** assistant-ui swallows failed file picks; report them like other failures. */
+function AttachmentAddErrors({
+  onError,
+}: {
+  onError: (message: string) => void;
+}) {
+  useAuiEvent("composer.attachmentAddError", (event) => onError(event.message));
+  return null;
+}
+
+function SentAttachments() {
+  const attachments = useAuiState(
+    (state) =>
+      state.message.metadata.custom.attachments as
+        ServerAttachment[] | undefined,
+  );
+  if (!attachments?.length) return null;
+  return (
+    <div className="col-start-2 flex justify-end">
+      <MessageAttachments
+        attachments={messageAttachmentItems(attachments)}
+        onOpen={downloadAttachment}
+        aria-label="Attachments"
+      />
+    </div>
   );
 }
 
@@ -262,6 +301,7 @@ const THREAD_COMPONENTS: ThreadComponents = {
   ToolFallback: ToolCall,
   MessageFooter,
   TranscriptEnd,
+  UserMessageAttachments: SentAttachments,
 };
 
 function MemoryMenuButton({ onOpen }: { onOpen: () => void }) {
@@ -322,6 +362,8 @@ function App() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // One adapter for the app's lifetime: it maps composer chips to uploaded ids.
+  const [attachmentAdapter] = useState(() => new ServerAttachmentAdapter());
   const [navigation, setNavigation] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [live, setLive] = useState<{
@@ -539,6 +581,11 @@ function App() {
       .filter((p) => p.type === "text")
       .map((p) => p.text)
       .join("\n");
+    const attachmentIds = (message.attachments ?? []).map((a) => {
+      const id = attachmentAdapter.serverId(a.id);
+      if (!id) throw new MessageNotSentError(`${a.name} was not uploaded.`);
+      return id;
+    });
     setBusy(true);
     setError("");
     try {
@@ -551,6 +598,7 @@ function App() {
       watch(
         await api<Run & { thread_id: string }>(`/${id}/messages`, "POST", {
           text,
+          attachment_ids: attachmentIds,
         }),
       );
       if (!selectedRef.current) select(id);
@@ -607,6 +655,7 @@ function App() {
     isSendDisabled: running || busy,
     onNew,
     adapters: {
+      attachments: attachmentAdapter,
       threadList: {
         threadId: selected ?? "new",
         threads: threads.map((thread) => ({
@@ -650,6 +699,7 @@ function App() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <AttachmentAddErrors onError={setError} />
       <RunFailureContext.Provider value={runFailure}>
         <RunSinceContext.Provider
           value={runningId && runSince?.id === runningId ? runSince.at : null}

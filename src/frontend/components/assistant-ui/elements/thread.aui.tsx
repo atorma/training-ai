@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/elements/attachment.aui";
@@ -115,6 +116,7 @@ const reasoningDuration = (timing: ThreadGroupPart["timing"]) =>
  * `ComposerExtra` renders in the composer's action row beside the attach
  * button. `MessageFooter` renders under every user and assistant message, and
  * `TranscriptEnd` after the last message (run status, errors).
+ * `UserMessageAttachments` replaces the runtime attachment tiles on user messages.
  */
 export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined;
@@ -128,6 +130,7 @@ export type ThreadComponents = {
   ComposerExtra?: ComponentType | undefined;
   MessageFooter?: ComponentType | undefined;
   TranscriptEnd?: ComponentType | undefined;
+  UserMessageAttachments?: ComponentType | undefined;
 };
 
 const messageGroupBy = groupPartByType({
@@ -566,8 +569,8 @@ const ComposerAction: FC = () => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      {/* No attachment button: the backend accepts text messages only. */}
       <div className="aui-composer-action-start flex items-center gap-1.5">
+        <ComposerAddAttachment />
         {ComposerExtra && <ComposerExtra />}
       </div>
       <div className="flex items-center gap-1.5">
@@ -897,14 +900,16 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
 );
 
 const UserMessage: FC = () => {
-  const { MessageFooter } = useContext(ThreadComponentsContext);
+  const { MessageFooter, UserMessageAttachments: SentAttachments } = useContext(
+    ThreadComponentsContext,
+  );
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       className="message fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
       data-role="user"
     >
-      <UserMessageAttachments />
+      {SentAttachments ? <SentAttachments /> : <UserMessageAttachments />}
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">

@@ -596,3 +596,50 @@ def test_prepared_turn_for_turn_context(memory_client):
     assert all("instructions" not in m for m in prepared.history.messages)
     assert len(prepared.messages) == 5
     assert prepared.messages[-1].parts[0].content == "I felt strong on the bike today"
+
+
+def test_earlier_attachments_are_placeholders_counted_in_the_history_budget(memory_client):
+    pdf = b"%PDF-1.7 fictional plan"
+    upload = memory_client.post(
+        "/api/attachments", files={"file": ("week-plan.pdf", pdf, "application/pdf")}
+    ).json()
+    store = memory_client.app.state.memory_store
+    conversations = store.conversations
+    thread = conversations.create_thread()["id"]
+    run = conversations.start_run(thread, "Plan attached", [upload["id"]])
+    conversations.finish_run(run["id"], "completed", [ModelResponse(parts=[TextPart("Saved")])])
+    support = current_source(memory_client, thread, "Follow-up")
+    prepared = prepare_turn(store, support, TODAY)
+    marker = f"[Attachment {upload['id']}: week-plan.pdf, application/pdf, 23 B]"
+    assert marker in compact(prepared.history.payload())
+    assert prepared.attachments == []
+    first = prepared.messages[0]
+    assert isinstance(first, ModelRequest)
+    assert [p.content for p in first.parts] == ["Plan attached", marker]
+
+    size = len(compact(prepared.history.payload()))
+    fits = prepare_turn(store, support, TODAY, MemoryLimits(history_budget=size))
+    assert len(fits.messages) == 3
+    omitted = prepare_turn(store, support, TODAY, MemoryLimits(history_budget=size - 1))
+    assert len(omitted.messages) == 1
+
+
+def test_current_turn_reports_its_attachments_for_content_loading(memory_client):
+    pdf = b"%PDF-1.7 fictional plan"
+    upload = memory_client.post(
+        "/api/attachments", files={"file": ("week-plan.pdf", pdf, "application/pdf")}
+    ).json()
+    store = memory_client.app.state.memory_store
+    thread = store.conversations.create_thread()["id"]
+    run = store.conversations.start_run(thread, "", [upload["id"]])
+    message = store.conversations.get_thread(thread)["messages"][-1]
+    support = MemorySource(
+        thread,
+        message["sequence"],
+        run["id"],
+        datetime.fromisoformat(message["payload"]["parts"][0]["timestamp"]),
+        "UTC",
+    )
+    prepared = prepare_turn(store, support, TODAY)
+    assert prepared.attachments == [upload]
+    assert [p.content for p in prepared.messages[-1].parts] == [""]

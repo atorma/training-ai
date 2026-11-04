@@ -27,6 +27,15 @@ class Config:
     memory_observation_budget: int = 4000
     conversation_history_budget: int = 64000
     database_path: str | Path = "data/conversations.sqlite3"
+    attachment_bucket: str | None = None
+    attachment_prefix: str = ""
+    attachment_dir: str | Path | None = None
+
+    def attachment_directory(self) -> Path:
+        """Local attachment bytes; defaults to `attachments/` next to the database."""
+        if self.attachment_dir:
+            return Path(self.attachment_dir)
+        return Path(self.database_path).parent / "attachments"
 
     def memory_limits(self) -> MemoryLimits:
         return MemoryLimits(
@@ -105,4 +114,7 @@ def load_config() -> Config:
         memory_observation_budget=observation_budget,
         conversation_history_budget=history_budget,
         database_path=database_path,
+        attachment_bucket=os.getenv("ATTACHMENT_BUCKET", "").strip() or None,
+        attachment_prefix=os.getenv("ATTACHMENT_PREFIX", "").strip().strip("/"),
+        attachment_dir=os.getenv("ATTACHMENT_DIR", "").strip() or None,
     )

@@ -99,3 +99,25 @@ def test_memory_limits_map_each_allowance_to_its_own_field(monkeypatch):
     assert config.load_config().memory_limits() == MemoryLimits(
         observation_days=7, required_budget=2001, observation_budget=2002, history_budget=2003
     )
+
+
+def test_attachments_default_to_a_directory_next_to_the_database(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("DATABASE_PATH", "/srv/training/chat.sqlite3")
+    for name in ("ATTACHMENT_BUCKET", "ATTACHMENT_PREFIX", "ATTACHMENT_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    loaded = config.load_config()
+    assert loaded.attachment_bucket is None
+    assert loaded.attachment_prefix == ""
+    assert str(loaded.attachment_directory()) == "/srv/training/attachments"
+    monkeypatch.setenv("ATTACHMENT_DIR", " /srv/files ")
+    assert str(config.load_config().attachment_directory()) == "/srv/files"
+
+
+def test_attachment_bucket_and_prefix_are_trimmed(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("ATTACHMENT_BUCKET", " fictional-attachments ")
+    monkeypatch.setenv("ATTACHMENT_PREFIX", " /chat/ ")
+    loaded = config.load_config()
+    assert loaded.attachment_bucket == "fictional-attachments"
+    assert loaded.attachment_prefix == "chat"

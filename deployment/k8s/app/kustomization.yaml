@@ -4,6 +4,7 @@ labels:
   - pairs:
       app: training-ai
 resources:
+- service-account.yaml
 - deployment.yaml
 - service.yaml
 - ingress.yaml

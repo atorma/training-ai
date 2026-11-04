@@ -19,8 +19,12 @@ sequenceDiagram
         API->>DB: Create thread
         API-->>UI: 201 thread metadata
     end
-    UI->>API: POST /api/threads/{id}/messages {text}
-    API->>DB: Commit user message and running run
+    opt Attachments (on pick, before sending)
+        UI->>API: POST /api/attachments (multipart file)
+        API-->>UI: 201 unsent attachment
+    end
+    UI->>API: POST /api/threads/{id}/messages {text, attachment_ids}
+    API->>DB: Commit user message, attachment links and running run
     API->>Task: Launch generation
     API-->>UI: 202 run
     Task->>DB: Prepare bounded complete history and memory
@@ -53,7 +57,7 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 | GET | `/api/threads/{id}` | — | `200`: thread detail |
 | PATCH | `/api/threads/{id}` | `{"title":"..."}` | `200`: updated thread detail |
 | DELETE | `/api/threads/{id}` | — | `200`: `{"deleted":true}` |
-| POST | `/api/threads/{id}/messages` | `{"text":"..."}` | `202`: new running run |
+| POST | `/api/threads/{id}/messages` | `{"text":"...","attachment_ids":[...]}` | `202`: new running run |
 | POST | `/api/threads/{id}/retry` | — | `202`: new run reusing the saved prompt |
 | GET | `/api/health` | — | `200`: `{"status":"ok"}` |
 | GET | `/api/events` | — | `200`: SSE `ready` / `changed` notifications |
@@ -62,11 +66,15 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 | GET | `/api/memory/{id}` | — | `200`: entry, source links and revision history, or content-free forgotten status |
 | PATCH | `/api/memory/{id}` | `expected_revision`, full `data` | `200`: current updated entry |
 | DELETE | `/api/memory/{id}` | `expected_revision` | `200`: forgetting receipt |
+| POST | `/api/attachments` | Multipart `file` | `201`: unsent attachment |
+| GET | `/api/attachments/{id}/content` | — | `200`: original bytes, name and media type |
+| DELETE | `/api/attachments/{id}` | — | `204`: unsent upload deleted |
 
 | Response shape | Fields |
 | --- | --- |
 | Thread metadata | `id`, `title`, `created_at`, `updated_at` |
-| Thread detail | Metadata + `messages: [{sequence, payload}]` + latest `run` or `null`; optional `memory_receipts` |
+| Thread detail | Metadata + `messages: [{sequence, payload, attachments?}]` + latest `run` or `null`; optional `memory_receipts` |
+| Attachment | `id`, `file_name`, `media_type`, `size_bytes`, `content_sha256` |
 | Run | `id`, `thread_id`, `status`, `user_sequence`, `created_at`, `updated_at` |
 | Error | `{"error":"..."}` |
 
@@ -110,6 +118,29 @@ Memory listing accepts `topic`, `kind`, `status`, `start`, `end`, `offset` and `
 Date ranges overlap effective dates; unknown bounds are retained as uncertain matches.
 Malformed data/filters return `400`; missing entries return `404`. These endpoints share the
 existing ingress authentication boundary. See [shared training memory](shared-training-memory.md).
+
+## Attachments
+
+Implemented in [attachment_api.py](../src/training_ai/attachment_api.py). The composer uploads
+each file when it is picked or dropped, and the send request refers to the returned ids, so the
+send stays a small atomic JSON request. Removing a chip before sending deletes that upload.
+
+| Rule | Behavior |
+| --- | --- |
+| Accepted files | PDF, PNG, JPEG and WebP, detected from the leading bytes; the declared type must match. |
+| Size | At most 20 MB, enforced while the upload is read (`413`). |
+| Per message | Up to 5 unsent uploads; text may be empty when at least one is attached. |
+| Duplicates | Identical bytes share stored content; every upload still gets its own id. |
+| Upload errors | `400` for other or mismatched types, an empty file or a missing `file` field. |
+| Send errors | `400` for unknown, removed, already sent or duplicate ids, or more than 5; nothing is saved. |
+| Removal | `DELETE` returns `204` for an unsent upload, `409` once sent, `404` when unknown. |
+| Download | `Content-Disposition: attachment` with the original name; `404` when unknown. |
+| Storage errors | `503` when the byte store cannot be reached; text-only chat keeps working. |
+| Deleted threads | Their attachments return `404`; the same file attached elsewhere still downloads. |
+
+The composer shows each upload as a tile with its progress and a remove button. Sent attachments
+appear above their message as rows with the file name, size and a type icon or image thumbnail;
+opening one downloads the original file.
 
 `POST /summary` is a separate integration endpoint, unused by the chat UI.
 See [application components](application-components.md) and [data model](data-model.md).

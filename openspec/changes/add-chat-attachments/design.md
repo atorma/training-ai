@@ -185,4 +185,7 @@ with the declared type is rejected. The size limit is enforced while streaming t
 
 ## Open Questions
 
-- Exact chip and drag-and-drop styling, which follows the ongoing UI style renewal.
+None. Chip styling was settled during implementation, after the UI style renewal: the composer
+keeps assistant-ui's attachment tiles (thumbnail, upload state, remove), and sent attachments
+use assistant-ui's received-files element `MessageAttachments` (name, size, type icon or image
+thumbnail), which downloads the original file when opened.
