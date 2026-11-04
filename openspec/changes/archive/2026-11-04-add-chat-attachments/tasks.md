@@ -106,7 +106,7 @@
 ## 9. Integration checks
 
 - [x] 9.1 Verify `make lint`, `make test` and `make test-e2e` all pass together
-- [ ] 9.2 With explicit approval for model costs, attach a fictional PDF and a fictional
+- [x] 9.2 With explicit approval for model costs, attach a fictional PDF and a fictional
   screenshot locally in `make run-web` with the configured model, and verify the answers use
   their content and a follow-up turn's request carries only placeholders
 
