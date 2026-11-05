@@ -9,6 +9,7 @@ from pydantic_ai.mcp import MCPToolset
 from training_ai.config import Config
 from training_ai.memory_store import MemoryStore
 from training_ai.memory_tools import add_memory_reading
+from training_ai.plan_tools import PlanAccess, add_plan_reading
 
 DEFAULT_BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
@@ -26,10 +27,27 @@ class Summary:
 
 @dataclass(frozen=True)
 class SummaryDeps(Summary):
-    """Date ranges plus read-only shared memory: the store and its compact JSON context."""
+    """Date ranges, read-only shared memory and the plan context prepared for today."""
 
     store: MemoryStore
     memory_context: str
+    plans: PlanAccess | None = None
+    plan_context: str = "{}"
+
+
+SUMMARY_PLAN_INSTRUCTIONS = """
+## Plan context for the summary
+PLAN DATA below holds the plan pointer for today, yesterday's and today's planned sessions in
+full, the next six days in compact form, and the active programmes' recurring items and
+guidance topics. Use the plan tools for anything beyond it.
+- Compare yesterday's planned sessions with the recorded activity: say which were done, which
+  have no matching activity, and what differed. Attribute a difference only to what the session
+  description, memory or recorded data states; never guess an unstated reason.
+- When no block covers today, say so.
+- If your instructions ask for a session suggestion, suggest sessions for the requested days
+  with a rationale that weighs the plan or its absence, key sessions, memory and recorded
+  activity. Say explicitly when a suggestion departs from the plan. Never change the plan.
+"""
 
 
 def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
@@ -53,6 +71,12 @@ def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
             "Use fitness data from "
             f"{ctx.deps.fitness_start_date} to {ctx.deps.fitness_end_date}."
         )
+
+    add_plan_reading(agent)
+
+    @agent.instructions
+    def plan_context_instructions(ctx: RunContext[SummaryDeps]) -> str:
+        return SUMMARY_PLAN_INSTRUCTIONS + "\nPLAN DATA (JSON): " + ctx.deps.plan_context
 
     # Registered last so the memory context JSON ends the instructions, as in the chat agent.
     add_memory_reading(agent)

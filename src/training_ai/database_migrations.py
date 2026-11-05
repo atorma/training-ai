@@ -402,12 +402,233 @@ def chat_attachments(db: Connection) -> None:
     db.execute("CREATE INDEX attachments_by_content ON attachments(content_sha256)")
 
 
+def coach_training_plans(db: Connection) -> None:
+    """Distilled coach plans: blocks and programmes with relational content and write receipts."""
+    db.execute("""
+        CREATE TABLE sports (
+            code TEXT CONSTRAINT pk_sports PRIMARY KEY CONSTRAINT nn_sports_code NOT NULL
+        ) STRICT
+    """)
+    db.executemany(
+        "INSERT INTO sports (code) VALUES (?)",
+        [
+            (code,)
+            for code in ("swim", "bike", "run", "strength", "mobility", "ski", "walk", "other")
+        ],
+    )
+    db.execute("""
+        CREATE TABLE plans (
+            id TEXT CONSTRAINT pk_plans PRIMARY KEY CONSTRAINT nn_plans_id NOT NULL,
+            kind TEXT CONSTRAINT nn_plans_kind NOT NULL
+                CONSTRAINT ck_plans_kind CHECK (kind IN ('block', 'programme')),
+            title TEXT CONSTRAINT nn_plans_title NOT NULL,
+            phase TEXT,
+            focus TEXT,
+            start_date TEXT CONSTRAINT nn_plans_start_date NOT NULL,
+            end_date TEXT CONSTRAINT nn_plans_end_date NOT NULL,
+            version INTEGER CONSTRAINT nn_plans_version NOT NULL
+                CONSTRAINT ck_plans_version CHECK (version > 0),
+            extraction_model TEXT CONSTRAINT nn_plans_extraction_model NOT NULL,
+            extraction_prompt_version TEXT
+                CONSTRAINT nn_plans_extraction_prompt_version NOT NULL,
+            created_at TEXT CONSTRAINT nn_plans_created_at NOT NULL,
+            updated_at TEXT CONSTRAINT nn_plans_updated_at NOT NULL,
+            CONSTRAINT ck_plans_range CHECK (start_date <= end_date)
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plans_by_kind_dates ON plans(kind, start_date, end_date)")
+    db.execute("""
+        CREATE TABLE plan_sources (
+            id TEXT CONSTRAINT pk_plan_sources PRIMARY KEY CONSTRAINT nn_plan_sources_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_sources_plan_id NOT NULL,
+            attachment_content_sha256 TEXT CONSTRAINT nn_plan_sources_content NOT NULL,
+            file_name TEXT CONSTRAINT nn_plan_sources_file_name NOT NULL,
+            media_type TEXT CONSTRAINT nn_plan_sources_media_type NOT NULL,
+            added_at TEXT CONSTRAINT nn_plan_sources_added_at NOT NULL,
+            CONSTRAINT uq_plan_sources_content UNIQUE (plan_id, attachment_content_sha256),
+            CONSTRAINT fk_plan_sources_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_sources_content FOREIGN KEY (attachment_content_sha256)
+                REFERENCES attachment_contents(sha256) ON DELETE RESTRICT
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_sources_by_content ON plan_sources(attachment_content_sha256)")
+    db.execute("""
+        CREATE TABLE plan_weeks (
+            plan_id TEXT CONSTRAINT nn_plan_weeks_plan_id NOT NULL,
+            week_start TEXT CONSTRAINT nn_plan_weeks_week_start NOT NULL
+                CONSTRAINT ck_plan_weeks_monday CHECK (strftime('%w', week_start) = '1'),
+            label TEXT,
+            hours_min REAL,
+            hours_max REAL,
+            CONSTRAINT pk_plan_weeks PRIMARY KEY (plan_id, week_start),
+            CONSTRAINT fk_plan_weeks_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT ck_plan_weeks_hours CHECK (
+                (hours_min IS NULL OR hours_min >= 0) AND (hours_max IS NULL OR hours_max >= 0)
+                AND (hours_min IS NULL OR hours_max IS NULL OR hours_min <= hours_max)
+            )
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE TABLE plan_sessions (
+            id TEXT CONSTRAINT pk_plan_sessions PRIMARY KEY
+                CONSTRAINT nn_plan_sessions_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_sessions_plan_id NOT NULL,
+            date TEXT CONSTRAINT nn_plan_sessions_date NOT NULL,
+            position INTEGER CONSTRAINT nn_plan_sessions_position NOT NULL
+                CONSTRAINT ck_plan_sessions_position CHECK (position >= 0),
+            title TEXT CONSTRAINT nn_plan_sessions_title NOT NULL,
+            description TEXT,
+            is_key INTEGER CONSTRAINT nn_plan_sessions_is_key NOT NULL
+                CONSTRAINT ck_plan_sessions_is_key CHECK (is_key IN (0, 1)),
+            start_time TEXT,
+            location TEXT,
+            CONSTRAINT uq_plan_sessions_position UNIQUE (plan_id, date, position),
+            CONSTRAINT fk_plan_sessions_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE TABLE plan_session_options (
+            id TEXT CONSTRAINT pk_plan_session_options PRIMARY KEY
+                CONSTRAINT nn_plan_session_options_id NOT NULL,
+            session_id TEXT CONSTRAINT nn_plan_session_options_session_id NOT NULL,
+            position INTEGER CONSTRAINT nn_plan_session_options_position NOT NULL
+                CONSTRAINT ck_plan_session_options_position CHECK (position >= 0),
+            condition TEXT,
+            description TEXT,
+            CONSTRAINT uq_plan_session_options_position UNIQUE (session_id, position),
+            CONSTRAINT fk_plan_session_options_session FOREIGN KEY (session_id)
+                REFERENCES plan_sessions(id) ON DELETE CASCADE
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE TABLE plan_workouts (
+            id TEXT CONSTRAINT pk_plan_workouts PRIMARY KEY
+                CONSTRAINT nn_plan_workouts_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_workouts_plan_id NOT NULL,
+            name TEXT CONSTRAINT nn_plan_workouts_name NOT NULL,
+            sport TEXT,
+            description TEXT CONSTRAINT nn_plan_workouts_description NOT NULL,
+            url TEXT,
+            CONSTRAINT uq_plan_workouts_name UNIQUE (plan_id, name),
+            CONSTRAINT fk_plan_workouts_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_workouts_sport FOREIGN KEY (sport)
+                REFERENCES sports(code) ON DELETE RESTRICT
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_workouts_by_sport ON plan_workouts(sport)")
+    db.execute("""
+        CREATE TABLE plan_option_parts (
+            option_id TEXT CONSTRAINT nn_plan_option_parts_option_id NOT NULL,
+            position INTEGER CONSTRAINT nn_plan_option_parts_position NOT NULL
+                CONSTRAINT ck_plan_option_parts_position CHECK (position >= 0),
+            sport TEXT CONSTRAINT nn_plan_option_parts_sport NOT NULL,
+            workout_id TEXT,
+            duration_min_minutes INTEGER,
+            duration_max_minutes INTEGER,
+            description TEXT,
+            CONSTRAINT pk_plan_option_parts PRIMARY KEY (option_id, position),
+            CONSTRAINT fk_plan_option_parts_option FOREIGN KEY (option_id)
+                REFERENCES plan_session_options(id) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_option_parts_sport FOREIGN KEY (sport)
+                REFERENCES sports(code) ON DELETE RESTRICT,
+            CONSTRAINT fk_plan_option_parts_workout FOREIGN KEY (workout_id)
+                REFERENCES plan_workouts(id) ON DELETE SET NULL,
+            CONSTRAINT ck_plan_option_parts_duration CHECK (
+                (duration_min_minutes IS NULL OR duration_min_minutes > 0)
+                AND (duration_max_minutes IS NULL OR duration_max_minutes > 0)
+                AND (duration_min_minutes IS NULL OR duration_max_minutes IS NULL
+                    OR duration_min_minutes <= duration_max_minutes)
+            )
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_option_parts_by_sport ON plan_option_parts(sport)")
+    db.execute("CREATE INDEX plan_option_parts_by_workout ON plan_option_parts(workout_id)")
+    db.execute("""
+        CREATE TABLE plan_recurring (
+            id TEXT CONSTRAINT pk_plan_recurring PRIMARY KEY
+                CONSTRAINT nn_plan_recurring_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_recurring_plan_id NOT NULL,
+            position INTEGER CONSTRAINT nn_plan_recurring_position NOT NULL
+                CONSTRAINT ck_plan_recurring_position CHECK (position >= 0),
+            text TEXT CONSTRAINT nn_plan_recurring_text NOT NULL,
+            workout_id TEXT,
+            CONSTRAINT uq_plan_recurring_position UNIQUE (plan_id, position),
+            CONSTRAINT fk_plan_recurring_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_recurring_workout FOREIGN KEY (workout_id)
+                REFERENCES plan_workouts(id) ON DELETE SET NULL
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_recurring_by_workout ON plan_recurring(workout_id)")
+    db.execute("""
+        CREATE TABLE plan_guidance (
+            id TEXT CONSTRAINT pk_plan_guidance PRIMARY KEY
+                CONSTRAINT nn_plan_guidance_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_guidance_plan_id NOT NULL,
+            position INTEGER CONSTRAINT nn_plan_guidance_position NOT NULL
+                CONSTRAINT ck_plan_guidance_position CHECK (position >= 0),
+            kind TEXT CONSTRAINT nn_plan_guidance_kind NOT NULL
+                CONSTRAINT ck_plan_guidance_kind CHECK (kind IN ('rule', 'advice', 'upcoming')),
+            topic TEXT CONSTRAINT nn_plan_guidance_topic NOT NULL,
+            text TEXT CONSTRAINT nn_plan_guidance_text NOT NULL,
+            event_date TEXT,
+            url TEXT,
+            CONSTRAINT uq_plan_guidance_position UNIQUE (plan_id, position),
+            CONSTRAINT fk_plan_guidance_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT ck_plan_guidance_event_date CHECK (
+                event_date IS NULL OR kind = 'upcoming'
+            )
+        ) STRICT
+    """)
+    db.execute("""
+        CREATE TABLE plan_open_questions (
+            id TEXT CONSTRAINT pk_plan_open_questions PRIMARY KEY
+                CONSTRAINT nn_plan_open_questions_id NOT NULL,
+            plan_id TEXT CONSTRAINT nn_plan_open_questions_plan_id NOT NULL,
+            session_id TEXT,
+            question TEXT CONSTRAINT nn_plan_open_questions_question NOT NULL,
+            CONSTRAINT fk_plan_open_questions_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_open_questions_session FOREIGN KEY (session_id)
+                REFERENCES plan_sessions(id) ON DELETE CASCADE
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_open_questions_by_plan ON plan_open_questions(plan_id)")
+    db.execute("CREATE INDEX plan_open_questions_by_session ON plan_open_questions(session_id)")
+    db.execute("""
+        CREATE TABLE plan_operations (
+            thread_id TEXT CONSTRAINT nn_plan_operations_thread_id NOT NULL,
+            sequence INTEGER CONSTRAINT nn_plan_operations_sequence NOT NULL,
+            operation_key TEXT CONSTRAINT nn_plan_operations_operation_key NOT NULL,
+            action TEXT CONSTRAINT nn_plan_operations_action NOT NULL
+                CONSTRAINT ck_plan_operations_action CHECK (
+                    action IN ('extract', 'reextract', 'edit')
+                ),
+            plan_id TEXT CONSTRAINT nn_plan_operations_plan_id NOT NULL,
+            applied_version INTEGER CONSTRAINT nn_plan_operations_applied_version NOT NULL,
+            created_at TEXT CONSTRAINT nn_plan_operations_created_at NOT NULL,
+            CONSTRAINT pk_plan_operations PRIMARY KEY (thread_id, sequence, operation_key),
+            CONSTRAINT fk_plan_operations_source FOREIGN KEY (thread_id, sequence)
+                REFERENCES messages(thread_id, sequence) ON DELETE CASCADE,
+            CONSTRAINT fk_plan_operations_plan FOREIGN KEY (plan_id)
+                REFERENCES plans(id) ON DELETE CASCADE
+        ) STRICT
+    """)
+    db.execute("CREATE INDEX plan_operations_by_plan ON plan_operations(plan_id)")
+
+
 # Position is the schema version: append migrations; never reorder or edit applied ones.
 MIGRATIONS = (
     initial_schema,
     Migration(_conversation_naming, suspend_foreign_keys=True),
     shared_training_memory,
     chat_attachments,
+    coach_training_plans,
 )
 
 

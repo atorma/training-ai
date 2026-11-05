@@ -45,14 +45,20 @@ the tools for questions that depend on planned training.
 
 ### Requirement: Bounded plan tool output
 
-Plan tool results SHALL stay within an output budget. A range whose content exceeds it SHALL be
-truncated at a day boundary with the date to continue from, and a search SHALL return at most
-10 hits with short snippets.
+The days of a plan tool result SHALL stay within an output budget. A range whose days exceed it
+SHALL be truncated at a day boundary with the date to continue from, and a search SHALL return at
+most 10 hits with short snippets. The result SHALL always include the first requested day, so that
+continuing always advances, however long that day or the plans' other content is.
 
 #### Scenario: Output budget reached
 
 - **WHEN** the plan tool is called for 30 days of a block whose sessions exceed the output budget
 - **THEN** it returns the days that fit, marks the result truncated and names the next date to request
+
+#### Scenario: Plan guidance is long
+
+- **WHEN** the plans in a range hold more guidance text than the output budget
+- **THEN** the result still includes the requested days and continuing moves past them
 
 ### Requirement: Plan-aware adaptation proposals
 

@@ -83,7 +83,8 @@ workout, and instructions.
 A session part or recurring item MAY link to a workout of a programme active on its date
 instead of a copy in its own plan. Deleting the programme SHALL clear such links. Re-extracting
 the programme SHALL keep workouts whose names are unchanged, and SHALL clear links to removed
-workouts with an open question in the linking plan.
+workouts with an open question in the linking plan. Removing a workout by an edit SHALL do the
+same. A plan that loses a link SHALL get a new version.
 
 #### Scenario: Gym session from the gym programme
 
@@ -198,6 +199,16 @@ cannot be repaired SHALL become open questions rather than be dropped silently.
 
 - **WHEN** an extracted session is dated one week after the block's end
 - **THEN** it is not saved as a session and an open question records it
+
+### Requirement: Unknown sports in an extraction
+
+A sport outside the known sports SHALL be saved as `other` with an open question naming it, so
+that one unknown sport does not lose the extraction.
+
+#### Scenario: Unknown sport
+
+- **WHEN** an extracted session has the sport "rowing"
+- **THEN** it is saved with the sport `other` and an open question names "rowing"
 
 ### Requirement: Editing the plan
 

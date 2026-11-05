@@ -266,8 +266,17 @@ def test_summary_api_uses_memories(app_client):
     assert response.status_code == 200
     assert response.json()["summary"] == "Some response"
     [(instructions, tools)] = model_requests
-    assert tools == ["get_memory", "search_memory"]  # No record/change/forget for a summary.
+    # Read tools only: no record/change/forget and no extract/edit/reextract for a summary.
+    assert tools == ["get_memory", "get_plan", "get_workout", "search_memory", "search_plan"]
     assert "Use activity data from date 2025-03-09 to 2025-03-09." in instructions
+    assert "## Plan context for the summary" in instructions
+    assert "never guess an unstated reason" in instructions
+    plan_data = json.loads(instructions.split("PLAN DATA (JSON): ", 1)[1].split("\n", 1)[0])
+    assert plan_data["pointer"].startswith(
+        "Plan pointer for 2025-03-10 (Monday):\nNo block covers today."
+    )
+    assert plan_data["yesterday"] == [] and len(plan_data["next_days"]) == 6
+    assert "## Extracting a coach document" not in instructions
     context = json.loads(instructions.split("CONTEXT (JSON data): ", 1)[1])
     assert {e["id"] for e in context["entries"]} == {seen["id"], open_goal["id"]}
     assert "Some memory" in instructions
@@ -294,3 +303,89 @@ def test_summary_api_reports_required_memory_overflow(app_client):
         "message": "Required memory exceeds MEMORY_CONTEXT_BUDGET (2000 characters). "
         "Manage shared memory or increase the configured allowance.",
     }
+
+
+def test_summary_api_receives_plan_context_for_yesterday_today_and_the_week(app_client):
+    """Yesterday and today in full, six compact days, programme items, pointer in the request zone."""
+    from datetime import date
+
+    from plan_fixtures import block_content, gym_content, part, seed_content_row, session
+
+    from training_ai import summary_agent
+
+    client = app_client
+    seed_content_row(client.app.state.conversation_store)
+    commands = client.app.state.plan_commands
+    commands.save_extraction(
+        "programme", date(2025, 3, 3), date(2025, 4, 27), gym_content(), [], "m", "v1"
+    )
+    commands.save_extraction(
+        "block",
+        date(2025, 3, 3),
+        date(2025, 3, 30),
+        block_content(
+            weeks=[{"week_start": "2025-03-03", "label": "base"}],
+            sessions=[
+                session("2025-03-09", "Indoor bike", [{"parts": [part("bike", None, 60, 60)]}]),
+                session(
+                    "2025-03-10", "Swim", [{"parts": [part("swim", "Swim program 1")]}], is_key=True
+                ),
+                session(
+                    "2025-03-12",
+                    "Run intervals",
+                    [{"parts": [part("run", None, 45, 60)]}],
+                    is_key=True,
+                ),
+            ],
+            open_questions=[],
+        ),
+        [],
+        "m",
+        "v1",
+    )
+    model_requests = []
+
+    def respond(messages, info):
+        model_requests.append(info.instructions)
+        return ModelResponse(parts=[TextPart(content="Some response")])
+
+    agent = client.app.state.summary_agent
+    with agent.override(model=FunctionModel(function=respond), toolsets=[]):
+        assert client.post("/summary", json=SUMMARY_REQUEST).status_code == 200
+    [instructions] = model_requests
+    plan_data = json.loads(instructions.split("PLAN DATA (JSON): ", 1)[1].split("\n", 1)[0])
+    assert "Block: Fictional Block 3" in plan_data["pointer"]
+    assert "Today: Swim [KEY]: swim." in plan_data["pointer"]
+    assert [s["title"] for s in plan_data["yesterday"]] == ["Indoor bike"]
+    assert plan_data["yesterday"][0]["options"][0]["parts"][0]["duration_min_minutes"] == 60
+    assert [s["title"] for s in plan_data["today"]] == ["Swim"]
+    assert [d["date"] for d in plan_data["next_days"]] == [f"2025-03-{d}" for d in range(11, 17)]
+    assert plan_data["next_days"][1]["sessions"] == ["Run intervals [KEY]: run 45-60 min"]
+    assert plan_data["programmes"][0]["title"] == "Fictional Gym Programme"
+    assert plan_data["programmes"][0]["guidance_topics"] == ["load"]
+    assert summary_agent.DEFAULT_BASE_INSTRUCTIONS == (
+        "You are a training assistant. You can access the user's training data through MCP tools. "
+        "Get data for the provided dates only. Create concise summaries."
+    )
+
+
+def test_plan_summary_context_drops_sections_to_stay_within_budget(tmp_path):
+    from datetime import date
+
+    from plan_fixtures import save_block, save_gym, seed_content_row
+
+    from training_ai.plan_commands import PlanCommands
+    from training_ai.plan_query import PlanQuery
+
+    store = ConversationStore(tmp_path / "plans.sqlite3")
+    store.initialize()
+    seed_content_row(store)
+    commands = PlanCommands(store)
+    save_gym(commands)
+    save_block(commands)
+    query = PlanQuery(store)
+    full = summary_api.plan_summary_context(query, date(2030, 3, 10))
+    assert "truncated" not in full and full["today"][0]["title"] == "Long ride or alternatives"
+    small = summary_api.plan_summary_context(query, date(2030, 3, 10), budget=1200)
+    assert small["truncated"] and small["next_days"] == [] and small["programmes"] == []
+    assert small["pointer"] == full["pointer"]

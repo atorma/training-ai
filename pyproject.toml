@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "google-cloud-storage>=3.17.1",
+  "pdfplumber>=0.11.10",
   "pydantic-ai==2.55.0",
   "pydantic-ai-slim[web]==2.55.0",
   "python-dotenv>=1.2.1",

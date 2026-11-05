@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
+from schema_checks import foreign_key_coverage
 from starlette.testclient import TestClient
 from test_memory_api import observation, record, source
 
@@ -22,28 +23,14 @@ def memory_client(tmp_path):
 
 def test_every_foreign_key_has_parent_unique_and_full_child_index(memory_client):
     with memory_client.app.state.conversation_store.connection() as db:
-        tables = [r[0] for r in db.execute("SELECT name FROM sqlite_schema WHERE type='table'")]
-
-        def indexes(table, unique=False):
-            return [
-                tuple(r[2] for r in db.execute(f'PRAGMA index_info("{index[1]}")'))
-                for index in db.execute(f'PRAGMA index_list("{table}")').fetchall()
-                if not index[4] and (not unique or index[2])
-            ]
-
-        total = 0
-        for table in tables:
-            groups = {}
-            for row in db.execute(f'PRAGMA foreign_key_list("{table}")'):
-                groups.setdefault(row[0], []).append(row)
-            for rows in groups.values():
-                rows.sort(key=lambda r: r[1])
-                child = tuple(r[3] for r in rows)
-                parent = tuple(r[4] for r in rows)
-                assert any(index[: len(child)] == child for index in indexes(table)), (table, child)
-                assert parent in indexes(rows[0][2], unique=True), (table, parent)
-                total += 1
-        assert total == 9
+        tables = [
+            r[0]
+            for r in db.execute(
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'plan%'"
+            )
+        ]
+        # Plan tables are covered in test_plan_schema.py.
+        assert foreign_key_coverage(db, tables) == 9
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 

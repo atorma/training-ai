@@ -69,12 +69,18 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 | POST | `/api/attachments` | Multipart `file` | `201`: unsent attachment |
 | GET | `/api/attachments/{id}/content` | — | `200`: original bytes, name and media type |
 | DELETE | `/api/attachments/{id}` | — | `204`: unsent upload deleted |
+| GET | `/api/plans` | — | `200`: `{"plans": [...]}`, newest start date first |
+| GET | `/api/plans/{id}` | — | `200`: a plan's full content and version |
+| DELETE | `/api/plans/{id}` | — | `200`: `{"deleted":true}` |
+| GET | `/api/plans/{id}/sources/{source_id}/content` | — | `200`: the source document's bytes, name and media type |
 
 | Response shape | Fields |
 | --- | --- |
 | Thread metadata | `id`, `title`, `created_at`, `updated_at` |
-| Thread detail | Metadata + `messages: [{sequence, payload, attachments?}]` + latest `run` or `null`; optional `memory_receipts` |
+| Thread detail | Metadata + `messages: [{sequence, payload, attachments?}]` + latest `run` or `null`; optional `memory_receipts` and `plan_receipts` |
 | Attachment | `id`, `file_name`, `media_type`, `size_bytes`, `content_sha256` |
+| Plan summary | `id`, `kind` (`block` or `programme`), `title`, `phase`, `focus`, `start_date`, `end_date`, `version` |
+| Plan | Summary + `weeks`, `sessions` (each with `options` and their `parts`, which name the linked workout), `workouts`, `recurring`, `guidance`, `open_questions`, `sources` |
 | Run | `id`, `thread_id`, `status`, `user_sequence`, `created_at`, `updated_at` |
 | Error | `{"error":"..."}` |
 
@@ -141,6 +147,18 @@ send stays a small atomic JSON request. Removing a chip before sending deletes t
 The composer shows each upload as a tile with its progress and a remove button. Sent attachments
 appear above their message as rows with the file name, size and a type icon or image thumbnail;
 opening one downloads the original file.
+
+## Plans
+
+Implemented in [plan_api.py](../src/training_ai/plan_api.py). Plans are written only by the
+chat assistant's tools; the API reads, deletes and serves source documents.
+
+| Rule | Behavior |
+| --- | --- |
+| Unknown plan or source | `404`. |
+| Deletion | Removes the plan and all its content; programmes, other blocks and shared memory are untouched. |
+| Sources | Downloadable by plan and source id even after the chat thread that carried the file is deleted; the attachment endpoint returns `404` then. |
+| Live updates | Every committed plan write (extraction, re-extraction, edit, deletion) sends the generic `changed` event on `/api/events`. The plan list and plan page refetch on `ready` and `changed`, keep the current content while refetching, and treat a `404` as "deleted". |
 
 `POST /summary` is a separate integration endpoint, unused by the chat UI.
 See [application components](application-components.md) and [data model](data-model.md).

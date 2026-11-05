@@ -22,6 +22,8 @@ from training_ai.memory_context import (
 )
 from training_ai.memory_models import MemoryLimits, MemorySource
 from training_ai.memory_store import MemoryStore
+from training_ai.plan_commands import receipts_in
+from training_ai.plan_models import PlanReceipt
 
 Payload = dict[str, Any]
 Turn = list[tuple[int, Payload]]
@@ -62,17 +64,22 @@ class PreparedTurn:
     history: HistoryPool
     # The current message's attachments; the caller loads their bytes into the last message.
     attachments: list[Attachment] = field(default_factory=list)
+    # Plan writes this message already committed, so a retried run refers to them.
+    plan_receipts: list[PlanReceipt] = field(default_factory=list)
 
     def required_payload(self) -> dict[str, list]:
         return required_payload(self.required, self.receipts)
 
     @property
     def context(self) -> dict[str, list]:
-        return {
+        context: dict[str, list] = {
             "entries": self.required.entries + self.observations.entries + self.history.entries,
             "receipts": self.receipts,
             "withdrawals": self.required.withdrawals + self.history.withdrawals,
         }
+        if self.plan_receipts:
+            context["plan_receipts"] = list(self.plan_receipts)
+        return context
 
 
 def _memory_id(value: Any) -> bool:
@@ -244,5 +251,8 @@ def prepare_turn(
         )
         turns, current, current_files = load_turns(snapshot.db, source)
         history, selected = select_history(selection, source, turns, limits.history_budget)
+        plan_receipts = receipts_in(snapshot.db, source.thread_id, source.sequence)
     messages = selected + ModelMessagesTypeAdapter.validate_python([current])
-    return PreparedTurn(messages, required, receipts, observations, history, current_files)
+    return PreparedTurn(
+        messages, required, receipts, observations, history, current_files, plan_receipts
+    )

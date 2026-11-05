@@ -19,6 +19,11 @@ from training_ai.database_migrations import migrate
 RunStatus = Literal["running", "completed", "failed", "interrupted"]
 
 
+def _compare_casefolded(left: str, right: str) -> int:
+    left, right = left.casefold(), right.casefold()
+    return (left > right) - (left < right)
+
+
 class Thread(TypedDict):
     id: str
     title: str
@@ -84,6 +89,9 @@ class ConversationStore:
         try:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA foreign_keys = ON")
+            # SQLite's NOCASE and LIKE fold only ASCII; plan names and text are often Finnish.
+            connection.create_collation("casefold", _compare_casefolded)
+            connection.create_function("casefold", 1, str.casefold, deterministic=True)
             with connection:
                 yield connection
         finally:

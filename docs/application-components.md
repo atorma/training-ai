@@ -17,6 +17,14 @@ flowchart TD
     Training --> Provider[Model provider]
     Training --> MCP[External MCP server]
     Training --> Memory[Memory tools / per-turn context]
+    Training --> PlanTools[Plan tools / plan pointer]
+    PlanTools --> PlanStore[PlanCommands / PlanQuery]
+    PlanTools --> Extractor[Extraction sub-agent / PDF pass]
+    Extractor --> Provider
+    PlanStore --> DB
+    Web --> PlanAPI[Plan endpoints]
+    PlanAPI --> PlanStore
+    PlanAPI --> Bytes
     Web --> MemoryAPI[Memory management endpoints]
     MemoryAPI --> MemoryStore[MemoryStore]
     Memory --> MemoryStore
@@ -57,7 +65,30 @@ flowchart TD
 | Attachment adapter | Uploads composer files on pick, deletes removed uploads, maps chips to uploaded ids; sent attachments render with `MessageAttachments` | [attachments.ts](../src/frontend/attachments.ts), [message-attachment.tsx](../src/frontend/components/assistant-ui/elements/message-attachment.tsx) |
 | Frontend API helper | JSON requests and typed HTTP errors | [api.ts](../src/frontend/api.ts) |
 | Stream reader | AI SDK SSE parsing, Vercel protocol assembly and mapping to assistant-ui messages | [stream.ts](../src/frontend/stream.ts) |
+| Training plans | Validated plan content and edit operations; the only writer (extraction saves, edits with a version check, re-extraction, deletion, receipts) and the read queries | [plan_models.py](../src/training_ai/plan_models.py), [plan_commands.py](../src/training_ai/plan_commands.py), [plan_query.py](../src/training_ai/plan_query.py) |
+| Plan agent integration | The plan pointer, read tools for any agent, and extraction/edit tools with instructions for the conversation agent | [plan_context.py](../src/training_ai/plan_context.py), [plan_tools.py](../src/training_ai/plan_tools.py) |
+| Plan extraction | Deterministic PDF pass (page text, red spans, page limit) and the structured-output sub-agent | [plan_pdf.py](../src/training_ai/plan_pdf.py), [plan_extraction.py](../src/training_ai/plan_extraction.py) |
+| Plan API and page | Read-only plan endpoints, deletion, source downloads and the browser view | [plan_api.py](../src/training_ai/plan_api.py), [plans.tsx](../src/frontend/plans.tsx) |
 | Summary path | Date-window validation, read-only memory context, summary generation and optional Signal delivery | [summary_api.py](../src/training_ai/summary_api.py), [summary_agent.py](../src/training_ai/summary_agent.py), [signal_sender.py](../src/training_ai/signal_sender.py) |
+
+## Training plans
+
+Coach documents attached in chat become **blocks** (dated sessions, non-overlapping) or
+**programmes** (gym routines, seasonal guidance). Everything below runs inside the chat run that
+asks for it; there is no job table.
+
+| Step | What happens |
+| --- | --- |
+| Extraction | `extract_plan(attachment_ids, kind, start, end, athlete_context)` accepts only this thread's attachments, rejects documents over 40 pages and a block range overlapping another block before any model call, runs the PDF pass (page-tagged text and red-hued spans as key-session evidence), then a separate sub-agent with structured output (`PlanContent`). The content is validated, repaired where possible (out-of-range sessions and unknown workout names become open questions) and saved in one transaction. The tool returns a compact summary; the full content never enters chat context. |
+| Pointer | Every chat turn's clock instructions end with a deterministic plan pointer for the same date: covering block, week and label, today's sessions with key flags, the next key session and active programmes, or the neighbouring blocks when no block covers the day. At most 1,500 characters. |
+| Read tools | `get_plan(start, end)` (at most 62 days; whole days until an output budget, then `truncated` with `continue_from`), `get_workout(plan_id, name)` and `search_plan(query)` (newest plans first, 10 hits). |
+| Edits | `edit_plan(plan_id, expected_version, operations)` applies row-level operations, validates the whole plan and commits only when the version is unchanged. Update fields that are omitted or null keep their values and `clear` empties optional ones; a violated rule returns `invalid` and changes nothing. Removing a workout clears its links with an open question in each linking plan, and other plans that lose a link get a new version. `reextract_plan` replaces a plan's content from its stored sources, keeping workout ids whose names survive so links from other plans stay valid. |
+| Receipts | Each committed write records a receipt keyed by the source message and a hash of the action and its arguments. A retried run finds the receipt, the tool answers `already_applied`, and the retry's context lists the message's `plan_receipts`. Thread detail exposes them too. |
+| Live updates | Every committed write sends the generic change event, so an open plan page refetches. |
+
+The sub-agent runs on the same model as chat (`MODEL`) and the plan records the model and the
+prompt version used. Agents without a conversation get only the read tools and the read
+instructions.
 
 ## Build and serving
 

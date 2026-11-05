@@ -134,6 +134,85 @@ erDiagram
 Deleted threads' attachments are no longer reachable through the app, but their bytes, which may
 be health-related, stay in the private store until that cleanup exists.
 
+## Coach training plans
+
+Migration 5 adds distilled coach plans. A plan is a **block** (a main plan with dated sessions;
+blocks never overlap) or a **programme** (a gym routine or seasonal guidance that may overlap
+anything). Both share one parent table; block-only content is restricted by the command layer,
+the only writer.
+
+```mermaid
+erDiagram
+    plans ||--o{ plan_sources : "documents"
+    plans ||--o{ plan_weeks : "block only"
+    plans ||--o{ plan_sessions : "block only"
+    plans ||--o{ plan_workouts : ""
+    plans ||--o{ plan_recurring : ""
+    plans ||--o{ plan_guidance : ""
+    plans ||--o{ plan_open_questions : ""
+    plans ||--o{ plan_operations : "receipts"
+    plan_sessions ||--|{ plan_session_options : "alternatives"
+    plan_session_options ||--o{ plan_option_parts : "none = rest"
+    plan_workouts |o--o{ plan_option_parts : "used by"
+    plan_workouts |o--o{ plan_recurring : "used by"
+    sports ||--o{ plan_option_parts : ""
+    sports |o--o{ plan_workouts : ""
+    attachment_contents ||--o{ plan_sources : "bytes"
+    messages ||--o{ plan_operations : "source"
+
+    plans {
+        TEXT id PK "UUID"
+        TEXT kind "block or programme"
+        TEXT title
+        TEXT phase "nullable"
+        TEXT focus "nullable"
+        TEXT start_date "inclusive, start <= end"
+        TEXT end_date
+        INTEGER version "incremented on every write"
+        TEXT extraction_model
+        TEXT extraction_prompt_version
+    }
+    plan_sessions {
+        TEXT id PK
+        TEXT plan_id FK
+        TEXT date
+        INTEGER position "unique per plan and date"
+        TEXT title
+        INTEGER is_key "0 or 1"
+        TEXT start_time "nullable"
+        TEXT location "nullable"
+    }
+    plan_option_parts {
+        TEXT option_id PK
+        INTEGER position PK
+        TEXT sport FK
+        TEXT workout_id FK "nullable, set null when the workout goes"
+        INTEGER duration_min_minutes "nullable, min <= max"
+        INTEGER duration_max_minutes "nullable"
+        TEXT description "nullable"
+    }
+```
+
+| Table | Holds | Rules in the schema |
+| --- | --- | --- |
+| `plan_sources` | The documents a plan was extracted from | `(plan_id, sha256)` unique; references `attachment_contents` with `RESTRICT`, so the bytes outlive the chat thread that carried them |
+| `plan_weeks` | Label and hours range per week (blocks) | Primary key `(plan_id, week_start)`; `week_start` is a Monday; hours non-negative and ordered |
+| `plan_sessions` | Dated sessions with a key flag (blocks) | Position unique per plan and date |
+| `plan_session_options` | The coach's alternatives for a session | Position unique per session; an option without parts means rest |
+| `plan_option_parts` | Sport parts of an option (bricks have several) | Sport from `sports`; optional workout link; durations positive and ordered |
+| `plan_workouts` | Named workouts, per plan | Name unique per plan; optional sport |
+| `plan_recurring` | Habits with their frequency as text | Position unique per plan; optional workout link |
+| `plan_guidance` | Rules, advice and upcoming events | `event_date` only on `upcoming` |
+| `plan_open_questions` | Questions the extraction could not settle | Optional session; removed with its session or plan |
+| `plan_operations` | Receipts of committed writes keyed by source message and operation key | Cascades from the message and the plan |
+| `sports` | Lookup of sport codes, seeded with `swim`, `bike`, `run`, `strength`, `mobility`, `ski`, `walk`, `other` | A new sport is an inserted row |
+
+Rules the schema cannot express are enforced by the command layer inside the writing
+transaction: sessions within the block's range, weeks overlapping the block, every session has
+an option, workout links to the same plan or to a programme active on the linking date, no
+sessions or weeks on programmes, and no overlapping blocks. All child rows cascade from their
+plan; workout links are set to null when the workout is deleted.
+
 ## Shared training memory
 
 [MemoryStore](../src/training_ai/memory_store.py) provides concrete transactional queries/commands.

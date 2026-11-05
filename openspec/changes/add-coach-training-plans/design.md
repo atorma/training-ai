@@ -287,7 +287,9 @@ The command layer, the only writer, checks what the schema cannot: dates within 
 range, no overlapping blocks, workout links to the same plan or to a programme active on the
 linking date (for recurring items, a programme overlapping the plan), at least one option per
 session, and no sessions or weeks on programmes. Cross-plan links are checked when the linking
-plan is written; a later change to the programme's dates leaves them in place.
+plan is written or a linking session moves; a later change to the programme's dates leaves them
+in place. Sports outside `sports` become `other` with an open question in an extraction, and are
+rejected in an edit.
 
 Most sessions have one option with one part; the three-level shape exists because alternatives
 are frequent and an alternative can itself be a brick. Matching recorded activities (and later
@@ -384,16 +386,22 @@ move (change date or position) or remove a session; add, update or remove an opt
 add, update or remove a workout, recurring item or guidance item; remove an open question; and
 update the plan's title, phase, focus or dates. The tool validates the result and commits only
 if `version` still equals `expected_version`, incrementing it; otherwise it returns a conflict
-and the assistant reads the plan again. Operations also cover a week's label and hours. Date
-changes are checked for block overlap like extractions. The tool result lists what changed,
-which the chat shows as the tool call.
+and the assistant reads the plan again. Operations also cover a week's label and hours and
+removing a week; shortening a block removes the weeks left outside it. Date changes are checked
+for block overlap like extractions. The tool result lists what changed, which the chat shows as
+the tool call. An update field that is omitted or null keeps its value, because models with
+strict tool schemas send every property; a `clear` list names optional fields to empty. A
+violated rule comes back as an invalid result that changes nothing, including an unknown workout
+name.
 
 `reextract_plan(plan_id, expected_version)` reads the version when it starts, runs the
 sub-agent on the plan's sources, and in one transaction checks that the version is unchanged,
 deletes the plan's content rows and inserts the new extraction; otherwise it fails with a
 conflict and saves nothing. Re-extracting a programme keeps the ids of workouts whose names
 are unchanged, so links from blocks survive. Links to workouts that no longer exist are
-cleared, and each clearing adds an open question to the linking plan.
+cleared, and each clearing adds an open question to the linking plan, also when an edit removes
+the workout. A plan that loses a link to another plan's write gets a new version, so stale edits
+to it conflict.
 
 ### Retried runs do not repeat plan writes
 
@@ -427,8 +435,9 @@ was rejected: it would contradict the existing clock context, which retries refr
 Tools:
 
 - `get_plan(start, end)`: at most 62 days, returning plan ids and versions for later edits.
-  Days are returned in full in date order until an output budget (about 20,000 characters) is
-  reached; the result then says it is truncated and gives the date to continue from.
+  Days are returned in full in date order until an output budget (about 20,000 characters of
+  days) is reached; the result then says it is truncated and gives the date to continue from.
+  The first day always comes back, so paging advances, and the plans section does not count.
 - `get_workout(plan_id, name)`.
 - `search_plan(query)`: case-insensitive match over workout names and descriptions, recurring
   items and guidance of all plans, newest plans first, at most 10 hits with short snippets and

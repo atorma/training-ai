@@ -8,6 +8,7 @@ from starlette.staticfiles import StaticFiles
 from training_ai.attachment_store import create_byte_store
 from training_ai.config import Config
 from training_ai.conversation_api import create_conversation_app
+from training_ai.plan_extraction import create_extraction_agent
 from training_ai.signal_sender import build_signal_sender
 from training_ai.summary_agent import create_summary_agent
 from training_ai.summary_api import create_summary_handler
@@ -25,6 +26,8 @@ def create_app(config: Config) -> Starlette:
         config.timezone,
         config.memory_limits(),
         create_byte_store(config),
+        create_extraction_agent(config.model),
+        config.model,
     )
     app.state.conversation_agent = conversation_agent
     app.state.config = config
@@ -35,7 +38,11 @@ def create_app(config: Config) -> Starlette:
     app.add_route(
         "/summary",
         create_summary_handler(
-            summary_agent, signal_sender, app.state.memory_store, config.memory_limits()
+            summary_agent,
+            signal_sender,
+            app.state.memory_store,
+            config.memory_limits(),
+            app.state.plan_query,
         ),
         methods=["POST"],
         name="Training Summary",

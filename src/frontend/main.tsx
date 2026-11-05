@@ -18,7 +18,7 @@ import {
   type ToolCallMessagePart,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { BrainIcon } from "lucide-react";
+import { BrainIcon, CalendarDaysIcon } from "lucide-react";
 import {
   api,
   ApiError,
@@ -35,6 +35,7 @@ import {
 } from "./attachments";
 import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 import { MemoryView } from "./memory";
+import { PlansView } from "./plans";
 import {
   ConnectionState,
   type ConnectionPhase,
@@ -304,7 +305,13 @@ const THREAD_COMPONENTS: ThreadComponents = {
   UserMessageAttachments: SentAttachments,
 };
 
-function MemoryMenuButton({ onOpen }: { onOpen: () => void }) {
+function FooterMenu({
+  onMemory,
+  onPlans,
+}: {
+  onMemory: () => void;
+  onPlans: () => void;
+}) {
   const { setOpenMobile } = useSidebar();
   return (
     <SidebarMenu>
@@ -312,7 +319,18 @@ function MemoryMenuButton({ onOpen }: { onOpen: () => void }) {
         <SidebarMenuButton
           onClick={() => {
             setOpenMobile(false);
-            onOpen();
+            onPlans();
+          }}
+        >
+          <CalendarDaysIcon />
+          Plans
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          onClick={() => {
+            setOpenMobile(false);
+            onMemory();
           }}
         >
           <BrainIcon />
@@ -377,6 +395,13 @@ function App() {
   const selectedRef = useRef(selected);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryEntry, setMemoryEntry] = useState<string | null>(null);
+  // ?plan=<id> opens the plans view on that plan, so a plan page can be shared or bookmarked.
+  const [plansOpen, setPlansOpen] = useState(() =>
+    new URLSearchParams(location.search).has("plan"),
+  );
+  const [planId, setPlanId] = useState<string | null>(() =>
+    new URLSearchParams(location.search).get("plan"),
+  );
   const [receiptNotices, setReceiptNotices] = useState<
     { key: string; receipt: MemoryReceipt; expires: number }[]
   >([]);
@@ -438,6 +463,25 @@ function App() {
   function openMemory(id: string | null = null) {
     setMemoryEntry(id);
     setMemoryOpen(true);
+  }
+
+  // Stable: the plan page resubscribes to server events when this changes.
+  const showPlan = useCallback((id: string | null) => {
+    setPlanId(id);
+    history.replaceState(
+      null,
+      "",
+      id
+        ? `?plan=${encodeURIComponent(id)}`
+        : selectedRef.current
+          ? `?thread=${encodeURIComponent(selectedRef.current)}`
+          : "/",
+    );
+  }, []);
+
+  function closePlans() {
+    setPlansOpen(false);
+    showPlan(null);
   }
 
   const select = useCallback((id: string | null) => {
@@ -710,7 +754,12 @@ function App() {
           >
             <CloseMobileSidebarOn value={navigation} />
             <ThreadListSidebar
-              footer={<MemoryMenuButton onOpen={() => openMemory()} />}
+              footer={
+                <FooterMenu
+                  onMemory={() => openMemory()}
+                  onPlans={() => setPlansOpen(true)}
+                />
+              }
             />
             <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
               <header className="flex items-center gap-2 border-b px-4 py-3">
@@ -801,6 +850,23 @@ function App() {
                     setMemoryOpen(false);
                     select(id);
                   }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+          <Dialog
+            open={plansOpen}
+            onOpenChange={(open) => (open ? setPlansOpen(true) : closePlans())}
+          >
+            <DialogContent
+              showCloseButton={false}
+              className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
+            >
+              {plansOpen && (
+                <PlansView
+                  planId={planId}
+                  onSelect={showPlan}
+                  onClose={closePlans}
                 />
               )}
             </DialogContent>

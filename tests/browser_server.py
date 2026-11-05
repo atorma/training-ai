@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from datetime import date
 from pathlib import Path
 
 from pydantic_ai import Agent, models
@@ -13,6 +14,7 @@ from starlette.staticfiles import StaticFiles
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.memory_tools import add_conversation_memory
+from training_ai.plan_tools import add_plan_tools
 
 models.ALLOW_MODEL_REQUESTS = False
 failed_prompts = set()
@@ -71,6 +73,18 @@ async def respond(messages, info):
         context = json.loads(info.instructions.split("CONTEXT (JSON data): ")[1])
         yield "Shared context: " + " | ".join(e["statement"] for e in context["entries"])
         return
+    if prompts[-1] == "Move Tuesday's swim to Thursday":
+        if not returned:
+            yield {
+                0: DeltaToolCall(
+                    name="edit_plan",
+                    json_args=json.dumps(_move_swim()),
+                    tool_call_id="browser-plan",
+                )
+            }
+            return
+        yield "Moved the swim to Thursday."
+        return
     if prompts[-1] == "Retry this response" and prompts[-1] not in failed_prompts:
         failed_prompts.add(prompts[-1])
         raise RuntimeError("Synthetic one-time provider failure")
@@ -79,9 +93,47 @@ async def respond(messages, info):
     yield " | ".join(prompts)
 
 
+def _move_swim():
+    """edit_plan arguments moving the seeded block's Tuesday swim to Thursday."""
+    query = app.state.plan_query
+    block = query.block_on(date(2030, 3, 5))
+    plan = query.get(block["id"])
+    swim = next(s for s in plan["sessions"] if s["title"] == "Swim program 1")
+    return {
+        "plan_id": plan["id"],
+        "expected_version": plan["version"],
+        "operations": [{"op": "move_session", "session_id": swim["id"], "date": "2030-03-07"}],
+    }
+
+
 agent = Agent(FunctionModel(stream_function=respond))
-add_conversation_memory(agent)
+add_plan_tools(agent)
+add_conversation_memory(agent)  # Last, so the memory context JSON ends the instructions.
 app = create_conversation_app(agent, os.environ["DATABASE_PATH"])
+
+
+async def seed_plans(request):
+    """Test-only: a fictional gym programme and block whose source PDF is a real upload."""
+    from plan_fixtures import block_content, gym_content
+
+    from training_ai.plan_commands import SourceFile
+
+    commands = app.state.plan_commands
+    body = await request.json()
+    sha = body["content_sha256"]
+    gym = commands.save_extraction(
+        "programme", date(2030, 3, 4), date(2030, 4, 28), gym_content(), [], "browser", "v1"
+    )
+    block = commands.save_extraction(
+        "block",
+        date(2030, 3, 4),
+        date(2030, 3, 31),
+        block_content(),
+        [SourceFile(sha, body["file_name"], "application/pdf")],
+        "browser",
+        "v1",
+    )
+    return JSONResponse({"block": block.plan_id, "programme": gym.plan_id})
 
 
 async def compatibility_thread(request):
@@ -103,6 +155,7 @@ async def compatibility_thread(request):
 
 
 app.add_route("/test/compatibility-thread", compatibility_thread, methods=["POST"])
+app.add_route("/test/plans", seed_plans, methods=["POST"])
 app.mount(
     "/",
     StaticFiles(

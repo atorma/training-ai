@@ -3,11 +3,13 @@ from datetime import datetime, timezone
 import pytest
 from pydantic_ai.models.function import FunctionModel
 from starlette.testclient import TestClient
-from test_conversation_api import create_thread, wait_for_status
+from test_conversation_api import create_thread, stream_response, wait_for_status
 
 from training_ai import training_agent
 from training_ai.config import Config
 from training_ai.conversation_api import create_conversation_app
+
+CONFIG = Config("test", "http://unused.invalid/mcp", None, None, None, None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -97,3 +99,55 @@ def test_chat_clock_refreshes_in_saved_conversations(
         assert f"Today is {timestamp[:10]} ({weekday})" in instructions
         assert f"yesterday is {yesterday}; tomorrow is {tomorrow}." in instructions
     assert len(requests[1][0]) > len(requests[0][0])
+
+
+def test_chat_agent_has_plan_instructions_and_the_summary_agent_does_not(tmp_path):
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    from training_ai.memory_store import MemoryStore
+    from training_ai.plan_tools import PLAN_READ_INSTRUCTIONS, PLAN_WRITE_INSTRUCTIONS
+    from training_ai.summary_agent import SummaryDeps, create_summary_agent
+
+    seen = {}
+
+    def capture(name):
+        async def respond(messages, info):
+            seen[name] = (info.instructions, sorted(t.name for t in info.function_tools))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        return respond
+
+    chat = training_agent.create_conversation_agent(CONFIG)
+    chat_model = FunctionModel(capture("chat"), stream_function=stream_response(capture("chat")))
+    with chat.override(model=chat_model, toolsets=[]):
+        with TestClient(create_conversation_app(chat, tmp_path / "chat.sqlite3")) as client:
+            thread_id = create_thread(client)
+            client.post(f"/api/threads/{thread_id}/messages", json={"text": "Hello"})
+            wait_for_status(client, thread_id)
+    instructions, tools = seen["chat"]
+    for section in (
+        "## When to read the plan",
+        "## Extracting a coach document",
+        "## Editing the plan",
+    ):
+        assert section in instructions
+    assert {"extract_plan", "edit_plan", "reextract_plan", "get_plan"} <= set(tools)
+
+    summary = create_summary_agent(CONFIG)
+    store = MemoryStore(client.app.state.conversation_store)
+    with summary.override(model=FunctionModel(capture("summary")), toolsets=[]):
+        import asyncio
+
+        asyncio.run(
+            summary.run(
+                "Summarize",
+                deps=SummaryDeps(
+                    "2030-03-01", "2030-03-02", "2030-02-01", "2030-03-02", store, "{}"
+                ),
+            )
+        )
+    instructions, tools = seen["summary"]
+    assert "## Extracting a coach document" not in instructions
+    assert not {"extract_plan", "edit_plan", "reextract_plan"} & set(tools)
+    assert PLAN_WRITE_INSTRUCTIONS.strip() not in instructions
+    assert PLAN_READ_INSTRUCTIONS  # The summary gains the read half in its own change task.

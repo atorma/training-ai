@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
 
 from training_ai.config import Config
 from training_ai.memory_tools import add_conversation_memory
+from training_ai.plan_context import plan_pointer
+from training_ai.plan_tools import add_plan_tools
 
 BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
@@ -26,14 +29,20 @@ def create_conversation_agent(config: Config) -> Agent:
     base_instructions = os.getenv("BASE_INSTRUCTIONS", BASE_INSTRUCTIONS)
     timezone = ZoneInfo(config.timezone)
     agent = Agent(config.model, instructions=base_instructions, toolsets=[mcp_server])
+    # Plan tools first: the memory instructions must stay last so their context JSON ends
+    # the instructions.
+    add_plan_tools(agent)
     add_conversation_memory(agent)
 
     @agent.instructions
-    def current_time_instructions() -> str:
+    def current_time_instructions(ctx: RunContext[Any]) -> str:
         now = datetime.now(timezone)
         today = now.date()
         yesterday = today - timedelta(days=1)
         tomorrow = today + timedelta(days=1)
+        plans = getattr(ctx.deps, "plans", None)
+        # Built for the same date as the clock context, so a delayed retry stays consistent.
+        pointer = ("\n\n" + plan_pointer(plans.query, today)) if plans else ""
         return (
             f"Current server date and time: {now.isoformat(timespec='seconds')}. "
             f"User timezone: {timezone.key}. "
@@ -43,6 +52,7 @@ def create_conversation_agent(config: Config) -> Agent:
             "in the current request, including dates passed to training-data tools. "
             "Do not infer the current date from model knowledge or earlier conversation turns. "
             "Keep dates referring to historical events anchored to their original context."
+            + pointer
         )
 
     return agent

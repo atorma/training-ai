@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -21,6 +21,9 @@ from starlette.status import (
 from training_ai.memory_context import compact, read_memory_context
 from training_ai.memory_models import MemoryContextLimit, MemoryLimits
 from training_ai.memory_store import MemoryStore
+from training_ai.plan_context import compact_days, plan_pointer
+from training_ai.plan_query import PlanQuery
+from training_ai.plan_tools import PlanAccess
 from training_ai.signal_sender import SignalSender, SignalSendError
 from training_ai.summary_agent import SummaryDeps
 
@@ -109,10 +112,47 @@ def _validate_summary_request(payload: dict, request_id: str) -> SummaryRequest 
         )
 
 
+PLAN_CONTEXT_BUDGET = 12000  # Characters of compact JSON for the summary's plan context.
+
+
+def plan_summary_context(query: PlanQuery, today: date, budget: int = PLAN_CONTEXT_BUDGET) -> dict:
+    """Pointer, yesterday and today in full, six compact days and programme items, within budget."""
+    yesterday = today - timedelta(days=1)
+    sessions = query.sessions(yesterday, today)
+    programmes = []
+    for programme in query.range_plans(today, today):
+        if programme["kind"] != "programme":
+            continue
+        programmes.append(
+            {
+                "plan_id": programme["id"],
+                "title": programme["title"],
+                "recurring": [r["text"] for r in programme["recurring"]],
+                "guidance_topics": sorted({g["topic"] for g in programme["guidance"]}),
+            }
+        )
+    context: dict = {
+        "pointer": plan_pointer(query, today),
+        "yesterday": [s for s in sessions if s["date"] == yesterday.isoformat()],
+        "today": [s for s in sessions if s["date"] == today.isoformat()],
+        "next_days": compact_days(query, today + timedelta(days=1), today + timedelta(days=6)),
+        "programmes": programmes,
+    }
+    for key in ("next_days", "programmes", "yesterday", "today"):
+        if len(compact(context)) <= budget:
+            break
+        context[key] = []
+        context["truncated"] = True
+    return context
+
+
 def _build_summary_deps(
-    summary_request: SummaryRequest, memory: MemoryStore, limits: MemoryLimits
+    summary_request: SummaryRequest,
+    memory: MemoryStore,
+    limits: MemoryLimits,
+    plan_query: PlanQuery | None = None,
 ) -> tuple[DateRange, DateRange, SummaryDeps]:
-    """Date ranges and the shared memory context, both as of today in the request timezone."""
+    """Date ranges, memory context and plan context, all as of today in the request timezone."""
     activity_range = _compute_date_range(
         summary_request.activity_days,
         summary_request.timezone,
@@ -123,6 +163,7 @@ def _build_summary_deps(
     )
     today = datetime.now(ZoneInfo(summary_request.timezone)).date()
     context = read_memory_context(memory, today, limits)
+    plan_query = plan_query or PlanQuery(memory.conversations)
 
     deps = SummaryDeps(
         activity_start_date=activity_range.start,
@@ -131,6 +172,8 @@ def _build_summary_deps(
         fitness_end_date=fitness_range.end,
         store=memory,
         memory_context=compact(context.context),
+        plans=PlanAccess(plan_query, today),
+        plan_context=compact(plan_summary_context(plan_query, today)),
     )
 
     return activity_range, fitness_range, deps
@@ -197,6 +240,7 @@ def create_summary_handler(
     signal_sender: SignalSender | None,
     memory: MemoryStore,
     limits: MemoryLimits | None = None,
+    plan_query: PlanQuery | None = None,
 ):
     limits = limits or MemoryLimits()
 
@@ -213,7 +257,7 @@ def create_summary_handler(
 
             try:
                 activity_range, fitness_range, deps = _build_summary_deps(
-                    summary_request, memory, limits
+                    summary_request, memory, limits, plan_query
                 )
             except MemoryContextLimit as exc:
                 # Safe text: the configured allowance and generic guidance, no memory contents.

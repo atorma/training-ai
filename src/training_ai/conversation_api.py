@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -36,6 +37,11 @@ from training_ai.memory_models import (
 )
 from training_ai.memory_store import MemoryStore
 from training_ai.memory_tools import ConversationMemoryDeps
+from training_ai.plan_api import plan_routes
+from training_ai.plan_commands import OperationSource, PlanCommands
+from training_ai.plan_models import PlanReceipt
+from training_ai.plan_query import PlanQuery
+from training_ai.plan_tools import PlanAccess
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,14 @@ logger = logging.getLogger(__name__)
 class ThreadResponse(ThreadDetail, total=False):
     context_error: str
     memory_receipts: list[ThreadMemoryReceipt]
+    plan_receipts: list[PlanReceipt]
+
+
+@dataclass(frozen=True)
+class ConversationDeps(ConversationMemoryDeps):
+    """Memory deps plus plan access for one conversation turn."""
+
+    plans: PlanAccess
 
 
 def create_conversation_app(
@@ -51,6 +65,8 @@ def create_conversation_app(
     timezone="UTC",
     limits: MemoryLimits | None = None,
     byte_store: ByteStore | None = None,
+    extraction_agent=None,
+    model_name: str = "",
 ):
     store = ConversationStore(database_path)
     byte_store = byte_store or LocalByteStore(Path(database_path).parent / "attachments")
@@ -66,6 +82,8 @@ def create_conversation_app(
             event_loop.call_soon_threadsafe(events.notify)
 
     memory = MemoryStore(store, notify_memory, timezone)
+    plan_commands = PlanCommands(store, notify_memory)
+    plan_query = PlanQuery(store)
 
     async def native_events(run):
         # Sanitize errors before the protocol encoder turns them into browser events.
@@ -76,8 +94,27 @@ def create_conversation_app(
             source = MemorySource(
                 run["thread_id"], run["user_sequence"], run["id"], timestamp, timezone
             )
-            prepared = prepare_turn(memory, source, datetime.now(zone).date(), limits)
-            deps = ConversationMemoryDeps(memory, source, compact(prepared.context))
+            today = datetime.now(zone).date()
+            prepared = prepare_turn(memory, source, today, limits)
+            deps = ConversationDeps(
+                memory,
+                source,
+                compact(prepared.context),
+                PlanAccess(
+                    plan_query,
+                    today,
+                    plan_commands,
+                    byte_store,
+                    OperationSource(run["thread_id"], run["user_sequence"]),
+                    {
+                        a["id"]: a
+                        for files in store.message_attachments(run["thread_id"]).values()
+                        for a in files
+                    },
+                    extraction_agent,
+                    model_name,
+                ),
+            )
             messages = prepared.messages
             if prepared.attachments:
                 contents = [
@@ -207,6 +244,9 @@ def create_conversation_app(
         receipts = memory.receipts(thread_id)
         if receipts:
             detail["memory_receipts"] = receipts
+        plan_receipts = plan_commands.receipts(thread_id)
+        if plan_receipts:
+            detail["plan_receipts"] = plan_receipts
         files = store.message_attachments(thread_id)
         for message in detail["messages"]:
             if message["sequence"] in files:
@@ -281,6 +321,7 @@ def create_conversation_app(
         routes=[
             *memory_routes(memory),
             *attachment_routes(store, byte_store),
+            *plan_routes(plan_query, plan_commands, byte_store),
             Route("/api/health", health),
             Route("/api/events", changes),
             Route("/api/threads", threads, methods=["GET", "POST"]),
@@ -293,4 +334,6 @@ def create_conversation_app(
     )
     app.state.conversation_store = store
     app.state.memory_store = memory
+    app.state.plan_commands = plan_commands
+    app.state.plan_query = plan_query
     return app
