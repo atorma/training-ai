@@ -72,9 +72,7 @@ class ExtractionInput:
 
 
 def create_extraction_agent(model: Any) -> Agent[None, PlanContent]:
-    return Agent[None, PlanContent](
-        model, output_type=PlanContent, instructions=EXTRACTION_INSTRUCTIONS, retries=2
-    )
+    return Agent(model, output_type=PlanContent, instructions=EXTRACTION_INSTRUCTIONS, retries=2)
 
 
 def extraction_prompt(inputs: ExtractionInput) -> list[Any]:
