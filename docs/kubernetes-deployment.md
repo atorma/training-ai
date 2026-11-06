@@ -51,6 +51,9 @@ have not been checked against the live cluster. See [GKE CSI documentation](http
 
 ## Attachment storage
 
+The application ingress allows request bodies of 21 MB, just above the 20 MB attachment limit, so
+the application enforces that limit itself rather than ingress-nginx's 1 MB default.
+
 Chat attachment bytes live in a private Google Cloud Storage bucket, not on the volume. The
 server reaches it as the `training-ai` Kubernetes service account through Workload Identity,
 with Application Default Credentials and no key files.
