@@ -65,6 +65,7 @@ Use Make, uv, Node.js 22.13+ (22.x) or 24+, and npm.
 
 | Command | Purpose |
 | --- | --- |
+| `make help` | List Make targets with descriptions. |
 | `make run-mcp` | Run the Intervals.icu MCP server in Docker on port 8000. |
 | `make dev-web` | Fastest UI loop: Vite hot reload on port 5173 plus the API server. |
 | `make run-web` | Build the frontend once and serve it as production does, with Python reload. |

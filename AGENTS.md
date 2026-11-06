@@ -20,6 +20,7 @@
 
 Use Make targets for development tasks.
 
+- `make help` - list Make targets with descriptions.
 - `make bootstrap` - install locked dependencies, Git hooks, and Playwright Chromium
   (requires Make, uv, Node.js, and npm).
 - `make lint` - check Python (Ruff, mypy, pyright) and tracked Markdown without modifying
