@@ -13,7 +13,7 @@ from training_ai.plan_tools import PlanAccess, add_plan_reading
 
 DEFAULT_BASE_INSTRUCTIONS = (
     "You are a training assistant. You can access the user's training data through MCP tools. "
-    "Get data for the provided dates only. Create concise summaries."
+    "Get data for the provided dates only. Create concise summaries. Suggest the next workouts."
 )
 
 
@@ -23,6 +23,7 @@ class Summary:
     activity_end_date: str
     fitness_start_date: str
     fitness_end_date: str
+    send_signal: bool
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,12 @@ def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
     @agent.instructions
     def plan_context_instructions(ctx: RunContext[SummaryDeps]) -> str:
         return SUMMARY_PLAN_INSTRUCTIONS + "\nPLAN DATA (JSON): " + ctx.deps.plan_context
+
+    @agent.instructions
+    def message_format_instructions(ctx: RunContext[SummaryDeps]) -> str | None:
+        if ctx.deps.send_signal:
+            return "Respond in plain text."
+        return None
 
     # Registered last so the memory context JSON ends the instructions, as in the chat agent.
     add_memory_reading(agent)

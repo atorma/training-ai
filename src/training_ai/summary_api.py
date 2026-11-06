@@ -170,6 +170,7 @@ def _build_summary_deps(
         activity_end_date=activity_range.end,
         fitness_start_date=fitness_range.start,
         fitness_end_date=fitness_range.end,
+        send_signal=summary_request.send_signal,
         store=memory,
         memory_context=compact(context.context),
         plans=PlanAccess(plan_query, today),
