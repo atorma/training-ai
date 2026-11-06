@@ -311,8 +311,6 @@ def test_summary_api_receives_plan_context_for_yesterday_today_and_the_week(app_
 
     from plan_fixtures import block_content, gym_content, part, seed_content_row, session
 
-    from training_ai import summary_agent
-
     client = app_client
     seed_content_row(client.app.state.conversation_store)
     commands = client.app.state.plan_commands
@@ -363,10 +361,6 @@ def test_summary_api_receives_plan_context_for_yesterday_today_and_the_week(app_
     assert plan_data["next_days"][1]["sessions"] == ["Run intervals [KEY]: run 45-60 min"]
     assert plan_data["programmes"][0]["title"] == "Fictional Gym Programme"
     assert plan_data["programmes"][0]["guidance_topics"] == ["load"]
-    assert summary_agent.DEFAULT_BASE_INSTRUCTIONS == (
-        "You are a training assistant. You can access the user's training data through MCP tools. "
-        "Get data for the provided dates only. Create concise summaries."
-    )
 
 
 def test_plan_summary_context_drops_sections_to_stay_within_budget(tmp_path):

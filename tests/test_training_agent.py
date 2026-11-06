@@ -142,7 +142,13 @@ def test_chat_agent_has_plan_instructions_and_the_summary_agent_does_not(tmp_pat
             summary.run(
                 "Summarize",
                 deps=SummaryDeps(
-                    "2030-03-01", "2030-03-02", "2030-02-01", "2030-03-02", store, "{}"
+                    activity_start_date="2030-03-01",
+                    activity_end_date="2030-03-02",
+                    fitness_start_date="2030-02-01",
+                    fitness_end_date="2030-03-02",
+                    send_signal=False,
+                    store=store,
+                    memory_context="{}",
                 ),
             )
         )
