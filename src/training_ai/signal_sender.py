@@ -51,7 +51,9 @@ class SignalSenderHttp:
             raise SignalSendError("Signal API request failed") from exc
 
         if response.status_code != 201:
-            raise SignalSendError(f"Signal API returned HTTP {response.status_code}")
+            detail = _error_detail(response)
+            suffix = f": {detail}" if detail else ""
+            raise SignalSendError(f"Signal API returned HTTP {response.status_code}{suffix}")
 
         return SignalSendResult(timestamp=_extract_timestamp(response))
 
@@ -64,6 +66,25 @@ def build_signal_sender(config: Config) -> SignalSender | None:
         config.signal_number,
         headers=config.signal_headers(),
     )
+
+
+_ERROR_DETAIL_MAX_CHARS = 500
+
+
+def _error_detail(response: httpx.Response) -> str:
+    """signal-cli-rest-api explains failures in an `error` field; fall back to the raw body."""
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and data.get("error"):
+        detail = str(data["error"])
+    else:
+        detail = response.text
+    detail = " ".join(detail.split())
+    if len(detail) > _ERROR_DETAIL_MAX_CHARS:
+        detail = detail[:_ERROR_DETAIL_MAX_CHARS] + "..."
+    return detail
 
 
 def _extract_timestamp(response: httpx.Response) -> Optional[str]:
