@@ -912,7 +912,7 @@ const UserMessage: FC = () => {
       {SentAttachments ? <SentAttachments /> : <UserMessageAttachments />}
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-muted text-foreground rounded-(--composer-radius) px-4 py-2 wrap-break-word empty:hidden [&_p]:whitespace-pre-line">
           <MessagePrimitive.Parts
             components={{
               Text: MarkdownText,

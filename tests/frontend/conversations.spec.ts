@@ -105,6 +105,32 @@ test("Enter adds a new line instead of sending", async ({ page }) => {
   ).toBeEnabled();
 });
 
+test("user messages keep their line breaks and Markdown", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Message" })
+    .fill("first line\nsecond line\n\n**third** line");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".message time")).toHaveCount(2);
+
+  const paragraphText = (index: number) =>
+    page.locator(".message").nth(index).locator("p").first();
+
+  // The test model echoes the prompt, so the assistant reply shows normal Markdown wrapping.
+  for (const reloaded of [false, true]) {
+    if (reloaded) await page.reload();
+    await expect
+      .poll(() => paragraphText(0).innerText())
+      .toBe("first line\nsecond line");
+    await expect(page.locator(".message").nth(0).locator("strong")).toHaveText(
+      "third",
+    );
+    await expect
+      .poll(() => paragraphText(1).innerText())
+      .toBe("Saved conversation: first line second line");
+  }
+});
+
 test("composer keeps focus after sending", async ({ page }) => {
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: "Message" });
