@@ -658,3 +658,48 @@ test("page links served favicon and touch icon", async ({ page, request }) => {
     expect(response.headers()["content-type"]).toContain(type);
   }
 });
+
+test("the model picker sends the chosen model, remembers it per thread and drops unsent changes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const picker = page.getByRole("combobox", { name: "Model" });
+  await expect(picker).toHaveValue("test:gpt-6.1-sol");
+  await expect(picker.getByRole("option")).toHaveText([
+    "gpt-6.1-sol",
+    "claude-opus-5-5",
+  ]);
+
+  await picker.selectOption({ label: "claude-opus-5-5" });
+  await page
+    .getByRole("textbox", { name: "Message" })
+    .fill("Plan my easy week");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByRole("status", { name: "Generating response" }),
+  ).toBeVisible();
+  await expect(picker).toBeDisabled();
+  await expect(
+    page.getByText(
+      "claude-opus-5-5 says: Saved conversation: Plan my easy week",
+      {
+        exact: true,
+      },
+    ),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(picker).toHaveValue("test:claude-opus-5-5");
+  await expect(picker).toBeEnabled();
+
+  // An unsent switch is forgotten when leaving the thread.
+  await picker.selectOption({ label: "gpt-6.1-sol" });
+  await page
+    .getByRole("button", { name: "New conversation", exact: true })
+    .click();
+  await expect(picker).toHaveValue("test:gpt-6.1-sol");
+  await page
+    .getByRole("button", { name: "Plan my easy week", exact: true })
+    .click();
+  await expect(picker).toHaveValue("test:claude-opus-5-5");
+});

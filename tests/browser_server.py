@@ -14,6 +14,7 @@ from starlette.staticfiles import StaticFiles
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.memory_tools import add_conversation_memory
+from training_ai.model_catalog import ModelCatalog
 from training_ai.plan_tools import add_plan_tools
 
 models.ALLOW_MODEL_REQUESTS = False
@@ -106,10 +107,27 @@ def _move_swim():
     }
 
 
+async def respond_as_second_model(messages, info):
+    """The same script, but text replies start by naming the second model."""
+    first = True
+    async for chunk in respond(messages, info):
+        if first and isinstance(chunk, str):
+            chunk = "claude-opus-5-5 says: " + chunk
+        first = False
+        yield chunk
+
+
 agent = Agent(FunctionModel(stream_function=respond))
 add_plan_tools(agent)
 add_conversation_memory(agent)  # Last, so the memory context JSON ends the instructions.
-app = create_conversation_app(agent, os.environ["DATABASE_PATH"])
+chat_models = ModelCatalog(
+    "test:gpt-6.1-sol",
+    {
+        "test:gpt-6.1-sol": None,  # The agent's own model.
+        "test:claude-opus-5-5": FunctionModel(stream_function=respond_as_second_model),
+    },
+)
+app = create_conversation_app(agent, os.environ["DATABASE_PATH"], models=chat_models)
 
 
 async def seed_plans(request):
@@ -144,7 +162,7 @@ async def compatibility_thread(request):
     messages = ModelMessagesTypeAdapter.validate_json(fixture)
     store = app.state.conversation_store
     thread = store.create_thread()
-    run = store.start_run(thread["id"], messages[0].parts[0].content)
+    run = store.start_run(thread["id"], messages[0].parts[0].content, model="test")
     with store.connection() as db:
         db.execute(
             "UPDATE messages SET payload=? WHERE thread_id=? AND sequence=1",

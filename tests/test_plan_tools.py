@@ -616,3 +616,63 @@ def test_extraction_prompt_lists_the_sport_codes(setup):
         "Sport codes: bike, mobility, other, run, ski, strength, swim, walk."
         in (extractor.prompts[0][0])
     )
+
+
+def test_extraction_runs_on_and_records_the_chat_runs_model(tmp_path):
+    from training_ai.model_catalog import ModelCatalog
+
+    script, default_extractor = Script(), Extractor()
+    calls = []
+
+    def second_extractor(messages, info):
+        calls.append(messages[0].parts[0].content[0])
+        content = block_content(title="Block from the second model")
+        return ModelResponse(
+            parts=[ToolCallPart("final_result", content.model_dump(mode="json"), "final")]
+        )
+
+    # The second model serves the chat stream and the sub-agent's structured request.
+    second = FunctionModel(second_extractor, stream_function=script.respond)
+    models = ModelCatalog("test-model", {"test-model": None, "test:second-model": second})
+    agent = training_agent.create_conversation_agent(CONFIG)
+    with agent.override(model=FunctionModel(stream_function=script.respond), toolsets=[]):
+        app = create_conversation_app(
+            agent,
+            tmp_path / "chat.sqlite3",
+            extraction_agent=create_extraction_agent(FunctionModel(default_extractor.respond)),
+            model_name="test-model",
+            models=models,
+        )
+        with TestClient(app) as client:
+            thread = create_thread(client)
+            response = client.post(
+                f"/api/threads/{thread}/messages",
+                json={
+                    "text": "Here is my new plan",
+                    "attachment_ids": [upload(client, plan_pdf())],
+                    "model": "test:second-model",
+                },
+            )
+            assert response.status_code == 202, response.text
+            result = reply(wait_for_status(client, thread))
+            assert result["status"] == "saved"
+            assert result["title"] == "Block from the second model"
+            assert len(calls) == 1 and default_extractor.prompts == []
+
+            # Retitle, then re-extract on the same model: the content comes from it again.
+            block_id = client.get("/api/plans").json()["plans"][0]["id"]
+            client.app.state.plan_commands.edit(
+                block_id,
+                1,
+                EditOperations.model_validate(
+                    {"operations": [{"op": "update_plan", "title": "Edited title"}]}
+                ),
+            )
+            script.next_call = ("reextract_plan", {"plan_id": block_id, "expected_version": 2})
+            send(client, thread, "Do it")
+            assert reply(wait_for_status(client, thread))["status"] == "saved"
+            assert plan(client, block_id)["title"] == "Block from the second model"
+            assert len(calls) == 2 and default_extractor.prompts == []
+            with client.app.state.conversation_store.connection() as db:
+                row = db.execute("SELECT extraction_model FROM plans").fetchone()
+            assert row[0] == "test:second-model"

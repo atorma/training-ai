@@ -38,6 +38,7 @@ class Run(TypedDict):
     user_sequence: int
     created_at: str
     updated_at: str
+    model: str  # The chat model id the run used.
 
 
 class StoredMessage(TypedDict):
@@ -179,7 +180,17 @@ class ConversationStore:
                 raise RunConflict("Wait for the response to finish before deleting this thread.")
             db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
 
-    def start_run(self, thread_id, text=None, attachment_ids=()) -> Run:
+    def latest_run_model(self, thread_id) -> str | None:
+        """The model of the thread's latest run, or `None` before its first run."""
+        with self.connection() as db:
+            self._require_thread(db, thread_id)
+            row = db.execute(
+                "SELECT model FROM runs WHERE thread_id = ? ORDER BY rowid DESC LIMIT 1",
+                (thread_id,),
+            ).fetchone()
+            return row["model"] if row else None
+
+    def start_run(self, thread_id, text=None, attachment_ids=(), *, model: str) -> Run:
         """Commit the prompt, its attachment links and a running run; `None` text retries."""
         timestamp = now()
         with self.connection() as db:
@@ -218,11 +229,13 @@ class ConversationStore:
                 "user_sequence": sequence,
                 "created_at": timestamp,
                 "updated_at": timestamp,
+                "model": model,
             }
             db.execute(
-                "INSERT INTO runs (id, thread_id, status, user_sequence, created_at, updated_at) "
+                "INSERT INTO runs "
+                "(id, thread_id, status, user_sequence, created_at, updated_at, model) "
                 "VALUES (:id, :thread_id, :status, :user_sequence, "
-                ":created_at, :updated_at)",
+                ":created_at, :updated_at, :model)",
                 run,
             )
             db.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (timestamp, thread_id))

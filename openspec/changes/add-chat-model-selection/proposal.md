@@ -72,7 +72,7 @@ The deltas add requirements, except for one modified requirement in `conversatio
 
 - Configuration: `CHAT_MODELS` (new, optional); `.env.example`, `README.md` and the Kubernetes
   deployment env.
-- Database: one migration rebuilds runs with a required recorded model, filling existing runs
+- Database: one migration adds a required recorded model to runs, filling existing runs
   with `openai:gpt-6.1-sol`.
 - API: `GET /api/models`; optional `model` on `POST /api/threads/{id}/messages` and `/retry`;
   `model` on runs and threads in thread detail.

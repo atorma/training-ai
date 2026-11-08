@@ -109,7 +109,7 @@ def test_overlapping_block_is_rejected_naming_the_conflict(commands):
 def test_repeated_operation_key_returns_already_applied(commands):
     commands, _ = commands
     thread = commands.conversations.create_thread()
-    commands.conversations.start_run(thread["id"], "Here is my plan")
+    commands.conversations.start_run(thread["id"], "Here is my plan", model="test")
     source = OperationSource(thread["id"], 1)
     key = operation_key("extract", {"ids": ["a"], "kind": "block"})
     first = save_block_with(commands, source, key)

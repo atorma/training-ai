@@ -73,15 +73,17 @@ Alternatives considered:
 
 ### Runs record the model id; the thread's model is derived
 
-Migration 6 rebuilds `runs` with a required model and fills existing rows in. It follows the
-migration 2 pattern: `suspend_foreign_keys`, create `runs_with_model`, copy rows keeping their
-`rowid`, validate the copy with `EXCEPT` both ways, drop and rename, then recreate
-`one_active_run` and `runs_by_thread`. The new column is:
+Migration 6 makes the model required in three steps:
 
 ```sql
-model TEXT CONSTRAINT nn_runs_model NOT NULL
-    CONSTRAINT ck_runs_model CHECK (length(model) > 0)
+ALTER TABLE runs ADD COLUMN model TEXT CONSTRAINT ck_runs_model CHECK (length(model) > 0);
+UPDATE runs SET model = 'openai:gpt-6.1-sol';
+ALTER TABLE runs ALTER COLUMN model SET NOT NULL;
 ```
+
+`ALTER COLUMN ... SET NOT NULL` works on the SQLite 3.53.1 bundled with uv's Python, which
+production runs since `dc5ea7d`, but not on Debian's 3.46.1. SQLite cannot name a `NOT NULL`
+added this way, and the user dropped the naming requirement for `NOT NULL` constraints.
 
 Existing rows get `'openai:gpt-6.1-sol'`. That was the only model used before this change, and
 it is the deployment's `MODEL` id. `openai:` and `openai-responses:` resolve to the same
@@ -161,12 +163,13 @@ run's id without any other change. The sub-agent itself is built once, with the 
 
 ## Migration Plan
 
-1. Migration 6 rebuilds `runs` with a required `model` and fills existing rows with
-   `openai:gpt-6.1-sol`. The migration validates its own copy before dropping the old table.
-   It gets no new automated test: a row copy plus one constant is verified by reading the
-   migration, and by upgrading a copy of a local database.
+1. Migration 6 adds `runs.model`, fills existing rows with `openai:gpt-6.1-sol` and makes it
+   `NOT NULL`. It needs the uv-Python image (SQLite 3.53.1), already deployed. It gets no new
+   automated test: three statements are verified by reading the migration, and by upgrading a
+   copy of a local database.
 2. Deployment (needs approval): add `CHAT_MODELS` to `deployment/k8s/app/deployment.yaml`. The
    manifest already references `ANTHROPIC_API_KEY` from `training-ai-secrets`. The pre-upgrade
    SQLite backup runs as usual.
-3. Rollback: an older image refuses schema version 6. Restore the pre-upgrade backup, or roll
+3. Rollback: an older image refuses schema version 6, and images before `dc5ea7d` also lack
+   the SQLite it needs. Restore the pre-upgrade backup, or roll
    forward with `CHAT_MODELS` removed, which restores today's single-model behavior.

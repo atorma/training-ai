@@ -23,7 +23,7 @@ sequenceDiagram
         UI->>API: POST /api/attachments (multipart file)
         API-->>UI: 201 unsent attachment
     end
-    UI->>API: POST /api/threads/{id}/messages {text, attachment_ids}
+    UI->>API: POST /api/threads/{id}/messages {text, attachment_ids, model}
     API->>DB: Commit user message, attachment links and running run
     API->>Task: Launch generation
     API-->>UI: 202 run
@@ -57,8 +57,9 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 | GET | `/api/threads/{id}` | — | `200`: thread detail |
 | PATCH | `/api/threads/{id}` | `{"title":"..."}` | `200`: updated thread detail |
 | DELETE | `/api/threads/{id}` | — | `200`: `{"deleted":true}` |
-| POST | `/api/threads/{id}/messages` | `{"text":"...","attachment_ids":[...]}` | `202`: new running run |
-| POST | `/api/threads/{id}/retry` | — | `202`: new run reusing the saved prompt |
+| POST | `/api/threads/{id}/messages` | `{"text":"...","attachment_ids":[...],"model":"..."}` | `202`: new running run |
+| POST | `/api/threads/{id}/retry` | Optional `{"model":"..."}` | `202`: new run reusing the saved prompt |
+| GET | `/api/models` | — | `200`: `{"default": id, "models": [{"id", "label"}]}` in configured order |
 | GET | `/api/health` | — | `200`: `{"status":"ok"}` |
 | GET | `/api/events` | — | `200`: SSE `ready` / `changed` notifications |
 | GET | `/api/threads/{id}/runs/{run_id}/events` | — | `200`: Vercel AI SDK v7 SSE stream |
@@ -77,12 +78,16 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 | Response shape | Fields |
 | --- | --- |
 | Thread metadata | `id`, `title`, `created_at`, `updated_at` |
-| Thread detail | Metadata + `messages: [{sequence, payload, attachments?}]` + latest `run` or `null`; optional `memory_receipts` and `plan_receipts` |
+| Thread detail | Metadata + `messages: [{sequence, payload, attachments?}]` + latest `run` or `null` + current `model`; optional `memory_receipts` and `plan_receipts` |
 | Attachment | `id`, `file_name`, `media_type`, `size_bytes`, `content_sha256` |
 | Plan summary | `id`, `kind` (`block` or `programme`), `title`, `phase`, `focus`, `start_date`, `end_date`, `version` |
 | Plan | Summary + `weeks`, `sessions` (each with `options` and their `parts`, which name the linked workout), `workouts`, `recurring`, `guidance`, `open_questions`, `sources` |
-| Run | `id`, `thread_id`, `status`, `user_sequence`, `created_at`, `updated_at` |
+| Run | `id`, `thread_id`, `status`, `user_sequence`, `created_at`, `updated_at`, `model` |
 | Error | `{"error":"..."}` |
+
+Send and retry take an optional `model`: a selectable model id from `/api/models`. Without it
+the run uses the thread's current `model`: its latest run's model while that model is still
+selectable, else the default. A model `label` is the id without its provider prefix.
 
 ## Synchronization and errors
 
@@ -99,7 +104,8 @@ Implemented in [conversation_api.py](../src/training_ai/conversation_api.py).
 - `?thread=<id>` records the selected conversation for reopening or sharing across browsers.
 - Selection/version checks discard stale detail responses after switching threads.
 - Saved timestamps display in the browser's locale and time zone.
-- `400`: malformed/empty input, message over 1,000,000 characters, or title over 200 characters.
+- `400`: malformed/empty input, message over 1,000,000 characters, title over 200 characters, or
+  a send/retry `model` that is not selectable (nothing is saved).
 - `404`: missing thread; the UI clears a deleted selection.
 - `409`: active run blocks another send/retry/delete, or the latest run cannot be retried.
 - Run subscriptions also return `409` after completion; the browser reloads saved thread detail.

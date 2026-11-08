@@ -25,7 +25,7 @@ def client(tmp_path):
 def source(client, text, timestamp=None):
     store = client.app.state.conversation_store
     thread = store.create_thread()
-    run = store.start_run(thread["id"], text)
+    run = store.start_run(thread["id"], text, model="test")
     prompt = store.get_thread(thread["id"])["messages"][0]["payload"]["parts"][0]
     if timestamp:
         with store.connection() as db:

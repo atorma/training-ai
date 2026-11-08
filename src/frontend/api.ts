@@ -15,6 +15,8 @@ export type Part = {
   args?: unknown;
 };
 export type Detail = Thread & {
+  /** The thread's current model: what the next send uses unless another is picked. */
+  model: string;
   context_error?: string;
   memory_receipts?: MemoryReceipt[];
   plan_receipts?: PlanReceipt[];
@@ -27,6 +29,7 @@ export type Detail = Thread & {
     id: string;
     status: "running" | "completed" | "failed" | "interrupted";
     user_sequence: number;
+    model: string;
   } | null;
 };
 
@@ -93,6 +96,11 @@ export type MemoryPage = {
   next_offset: number | null;
 };
 
+export type ModelList = {
+  default: string;
+  models: { id: string; label: string }[];
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -109,6 +117,10 @@ export async function api<T>(
   body?: unknown,
 ): Promise<T> {
   return request<T>(`/api/threads${path}`, method, body);
+}
+
+export async function modelsApi(): Promise<ModelList> {
+  return request<ModelList>("/api/models", "GET");
 }
 
 export async function memoryApi<T>(

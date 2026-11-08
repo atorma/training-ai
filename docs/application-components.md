@@ -47,7 +47,8 @@ flowchart TD
 | Application factory | Build the Starlette app from a `Config`: create agents, register routes, serve built UI, expose agents on `app.state` for tests | [app.py](../src/training_ai/app.py) |
 | Web entry point | Load configuration from the environment and expose the ASGI `app` for Uvicorn | [web.py](../src/training_ai/web.py) |
 | Configuration | Parse and validate environment variables into a `Config` | [config.py](../src/training_ai/config.py) |
-| Conversation API | Validate requests, call store commands/queries, own generation tasks and recovery | [conversation_api.py](../src/training_ai/conversation_api.py) |
+| Model catalog | Parse `CHAT_MODELS`, resolve every chat model at startup (missing keys fail it), labels without provider prefix, a thread's current model | [model_catalog.py](../src/training_ai/model_catalog.py) |
+| Conversation API | Validate requests (including the run's model), call store commands/queries, own generation tasks and recovery; each run streams on its own model | [conversation_api.py](../src/training_ai/conversation_api.py) |
 | Conversation store | SQLite commands/queries, transactions, ordered history, run state and process lock | [conversation_store.py](../src/training_ai/conversation_store.py) |
 | Database migrations | Shared append-only schema/data migrations, atomic upgrades and version checks | [database_migrations.py](../src/training_ai/database_migrations.py) |
 | Upgrade backup | Checked SQLite backup under the ownership lock before Kubernetes upgrades | [database_backup.py](../src/training_ai/database_backup.py) |
@@ -86,8 +87,9 @@ asks for it; there is no job table.
 | Receipts | Each committed write records a receipt keyed by the source message and a hash of the action and its arguments. A retried run finds the receipt, the tool answers `already_applied`, and the retry's context lists the message's `plan_receipts`. Thread detail exposes them too. |
 | Live updates | Every committed write sends the generic change event, so an open plan page refetches. |
 
-The sub-agent runs on the same model as chat (`MODEL`) and the plan records the model and the
-prompt version used. Agents without a conversation get only the read tools and the read
+The sub-agent runs on the chat run's model (the thread's selected model) and the plan records
+that model id and the prompt version used. The training summary and other requests outside chat
+use `MODEL`. Agents without a conversation get only the read tools and the read
 instructions.
 
 ## Build and serving

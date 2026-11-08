@@ -99,8 +99,13 @@ ESLint/Prettier, and TypeScript. Keep the Ruff hook revision aligned with its Py
 
 - `MCP_SERVER_URL` - MCP streamable HTTP endpoint (e.g., `http://127.0.0.1:8000/mcp`).
 - `INTERVALS_API_KEY` / `INTERVALS_ATHLETE_ID` - Intervals.icu credentials for `make run-mcp` only.
-- `MODEL` - Required model identifier (e.g., `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-latest`).
-- Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI.
+- `MODEL` - Required default model identifier (e.g., `openai:gpt-6.1-sol`). Used for new chat threads,
+  the training summary and other requests outside chat.
+- `CHAT_MODELS` - Optional comma-separated model ids offered in the chat picker (e.g.,
+  `openai:gpt-6.1-sol,anthropic:claude-opus-5-5`). The picker shows each id without its provider
+  prefix; `MODEL` is added first when unlisted. List only tool-calling models that accept images
+  and PDFs. Every listed model is checked at startup, including its API key.
+- Provider-specific API keys, e.g. `OPENAI_API_KEY` for OpenAI, `ANTHROPIC_API_KEY` for Anthropic.
 - `DATABASE_PATH` - SQLite file for web threads (default: `data/conversations.sqlite3`).
 - `MEMORY_OBSERVATION_DAYS` - Recent observation window (default: 30 days).
 - `MEMORY_CONTEXT_BUDGET` / `MEMORY_OBSERVATION_BUDGET` / `CONVERSATION_HISTORY_BUDGET` -

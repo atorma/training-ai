@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai.models import Model
 
 from training_ai.attachment_store import ByteStore
 from training_ai.attachments import Attachment
@@ -106,7 +107,8 @@ class PlanAccess:
     source: OperationSource | None = None
     attachments: dict[str, Attachment] = field(default_factory=dict)
     extraction_agent: Agent[None, PlanContent] | None = None
-    model_name: str = ""
+    model_name: str = ""  # The chat run's model id, recorded as the plan's extraction model.
+    model: Model | str | None = None  # The chat run's model; None keeps the sub-agent's own.
 
 
 class HasPlans(Protocol):
@@ -283,6 +285,7 @@ def _add_write_tools(agent: Agent[Any, Any]) -> None:
             return {"status": "unreadable", "message": str(exc)}
         content = await extract(
             access.extraction_agent,
+            access.model,
             ExtractionInput(
                 kind,
                 first,
@@ -392,6 +395,7 @@ def _add_write_tools(agent: Agent[Any, Any]) -> None:
             return {"status": "unreadable", "message": str(exc)}
         content = await extract(
             access.extraction_agent,
+            access.model,
             ExtractionInput(
                 plan["kind"],
                 first,

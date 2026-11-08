@@ -46,7 +46,7 @@ def test_prompt_carries_text_pass_spans_workouts_and_document():
         )
 
     agent = create_extraction_agent(FunctionModel(respond))
-    content = asyncio.run(extract(agent, inputs(pdf)))
+    content = asyncio.run(extract(agent, None, inputs(pdf)))
     assert content.title == "Fictional Block 3" and len(content.sessions) == 6
     messages, info = seen[0]
     assert info.instructions.strip() == EXTRACTION_INSTRUCTIONS.strip()
@@ -72,6 +72,6 @@ def test_invalid_structured_output_fails_after_retries():
 
     agent = create_extraction_agent(FunctionModel(respond))
     with pytest.raises(UnexpectedModelBehavior):
-        asyncio.run(extract(agent, inputs(pdf)))
+        asyncio.run(extract(agent, None, inputs(pdf)))
     assert len(calls) == 3  # One attempt plus two retries.
     assert ModelRetry  # Validation failures reach the model as retry prompts, never as plans.

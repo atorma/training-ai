@@ -16,7 +16,7 @@ def populated_store(tmp_path):
     store = ConversationStore(tmp_path / "chat.sqlite3")
     store.initialize()
     thread = store.create_thread()
-    run = store.start_run(thread["id"], "Before deployment")
+    run = store.start_run(thread["id"], "Before deployment", model="test")
     store.finish_run(run["id"], "failed")
     return store, thread["id"]
 
@@ -57,7 +57,8 @@ def test_upgrade_backup_includes_wal_and_restores_through_api(tmp_path):
     restored = tmp_path / "restored.sqlite3"
     shutil.copyfile(backup, restored)
     with TestClient(create_conversation_app(Agent(TestModel()), restored)) as client:
-        assert client.get(f"/api/threads/{thread_id}").json() == before
+        # API detail adds the thread's current model to the stored thread.
+        assert client.get(f"/api/threads/{thread_id}").json() == {**before, "model": "default"}
     with sqlite3.connect(backup) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 1
         assert db.execute("PRAGMA integrity_check").fetchall() == [("ok",)]

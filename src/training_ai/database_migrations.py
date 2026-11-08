@@ -622,6 +622,21 @@ def coach_training_plans(db: Connection) -> None:
     db.execute("CREATE INDEX plan_operations_by_plan ON plan_operations(plan_id)")
 
 
+# Every run before chat model selection used this model.
+_RUNS_BEFORE_MODEL_SELECTION = "openai:gpt-6.1-sol"
+
+
+def run_models(db: Connection) -> None:
+    """Record each run's chat model; existing runs get the only model used before."""
+    db.execute(
+        "ALTER TABLE runs ADD COLUMN model TEXT CONSTRAINT ck_runs_model CHECK (length(model) > 0)"
+    )
+    db.execute("UPDATE runs SET model = ?", (_RUNS_BEFORE_MODEL_SELECTION,))
+    # Works on the SQLite 3.53.1 bundled with uv's Python, not on Debian's 3.46.1. SQLite cannot
+    # name a NOT NULL added this way.
+    db.execute("ALTER TABLE runs ALTER COLUMN model SET NOT NULL")
+
+
 # Position is the schema version: append migrations; never reorder or edit applied ones.
 MIGRATIONS = (
     initial_schema,
@@ -629,6 +644,7 @@ MIGRATIONS = (
     shared_training_memory,
     chat_attachments,
     coach_training_plans,
+    run_models,
 )
 
 

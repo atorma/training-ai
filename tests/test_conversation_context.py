@@ -49,7 +49,7 @@ def memory_client(monkeypatch):
 
 def current_source(memory_client, thread, text="Continue unrelated gearing"):
     conversations = memory_client.app.state.conversation_store
-    run = conversations.start_run(thread, text)
+    run = conversations.start_run(thread, text, model="test")
     message = conversations.get_thread(thread)["messages"][-1]
 
     return MemorySource(
@@ -63,7 +63,7 @@ def current_source(memory_client, thread, text="Continue unrelated gearing"):
 
 def finish_turn(memory_client, thread, text, response):
     conversations = memory_client.app.state.conversation_store
-    run = conversations.start_run(thread, text)
+    run = conversations.start_run(thread, text, model="test")
     conversations.finish_run(run["id"], "completed", response)
 
 
@@ -233,7 +233,7 @@ def test_history_source_identity_survives_without_saved_tool_exchange(memory_cli
     store = memory_client.app.state.memory_store
     entry, support = record(memory_client)
     # Capture committed before the response failed. A later retry completed without tool calls.
-    run = store.conversations.start_run(support.thread_id)
+    run = store.conversations.start_run(support.thread_id, model="test")
     store.conversations.finish_run(
         run["id"], "completed", [ModelResponse(parts=[TextPart("Acknowledged")])]
     )
@@ -326,7 +326,7 @@ def test_frozen_message_fixture_decodes_and_prepares_as_history(memory_client):
     payloads = json.loads(fixture.read_text())
     conversations = memory_client.app.state.conversation_store
     thread = conversations.create_thread()["id"]
-    run = conversations.start_run(thread, messages[0].parts[0].content)
+    run = conversations.start_run(thread, messages[0].parts[0].content, model="test")
     # Store the frozen JSON as saved, not a re-serialization by the current library.
     with conversations.connection() as db:
         db.execute(
@@ -606,7 +606,7 @@ def test_earlier_attachments_are_placeholders_counted_in_the_history_budget(memo
     store = memory_client.app.state.memory_store
     conversations = store.conversations
     thread = conversations.create_thread()["id"]
-    run = conversations.start_run(thread, "Plan attached", [upload["id"]])
+    run = conversations.start_run(thread, "Plan attached", [upload["id"]], model="test")
     conversations.finish_run(run["id"], "completed", [ModelResponse(parts=[TextPart("Saved")])])
     support = current_source(memory_client, thread, "Follow-up")
     prepared = prepare_turn(store, support, TODAY)
@@ -631,7 +631,7 @@ def test_current_turn_reports_its_attachments_for_content_loading(memory_client)
     ).json()
     store = memory_client.app.state.memory_store
     thread = store.conversations.create_thread()["id"]
-    run = store.conversations.start_run(thread, "", [upload["id"]])
+    run = store.conversations.start_run(thread, "", [upload["id"]], model="test")
     message = store.conversations.get_thread(thread)["messages"][-1]
     support = MemorySource(
         thread,

@@ -37,6 +37,7 @@ from training_ai.memory_models import (
 )
 from training_ai.memory_store import MemoryStore
 from training_ai.memory_tools import ConversationMemoryDeps
+from training_ai.model_catalog import ModelCatalog
 from training_ai.plan_api import plan_routes
 from training_ai.plan_commands import OperationSource, PlanCommands
 from training_ai.plan_models import PlanReceipt
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 class ThreadResponse(ThreadDetail, total=False):
+    model: str  # The thread's current model: what the next send uses by default.
     context_error: str
     memory_receipts: list[ThreadMemoryReceipt]
     plan_receipts: list[PlanReceipt]
@@ -67,7 +69,10 @@ def create_conversation_app(
     byte_store: ByteStore | None = None,
     extraction_agent=None,
     model_name: str = "",
+    models: ModelCatalog | None = None,
 ):
+    # Without a catalog the agents' own model is the only, default, choice.
+    models = models or ModelCatalog.single(model_name or "default")
     store = ConversationStore(database_path)
     byte_store = byte_store or LocalByteStore(Path(database_path).parent / "attachments")
     limits = limits or MemoryLimits()
@@ -112,7 +117,8 @@ def create_conversation_app(
                         for a in files
                     },
                     extraction_agent,
-                    model_name,
+                    run["model"],
+                    models.model(run["model"]),
                 ),
             )
             messages = prepared.messages
@@ -126,6 +132,7 @@ def create_conversation_app(
                     attachments.with_content(messages[-1], prepared.attachments, contents),
                 ]
             async with agent.run_stream_events(
+                model=models.model(run["model"]),
                 message_history=messages,
                 deps=deps,
                 conversation_id=run["thread_id"],
@@ -238,6 +245,7 @@ def create_conversation_app(
             store.rename_thread(thread_id, title)
             events.notify()
         detail = ThreadResponse(**store.get_thread(thread_id))
+        detail["model"] = models.current(detail["run"]["model"] if detail["run"] else None)
         error = context_errors.get(thread_id)
         if error and detail["run"] and detail["run"]["id"] == error[0]:
             detail["context_error"] = error[1]
@@ -252,6 +260,16 @@ def create_conversation_app(
             if message["sequence"] in files:
                 message["attachments"] = files[message["sequence"]]
         return JSONResponse(detail)
+
+    def chosen_model(thread_id, body):
+        """The run's model: a selectable `model` from the body, else the thread's current one."""
+        model = body.get("model") if isinstance(body, dict) else None
+        if model is None:
+            return models.current(store.latest_run_model(thread_id))
+        return model if isinstance(model, str) and model in models else None
+
+    async def model_list(request):
+        return JSONResponse(models.as_json())
 
     async def send(request):
         invalid = JSONResponse(
@@ -279,15 +297,29 @@ def create_conversation_app(
             or (not text.strip() and not ids)
         ):
             return invalid
+        thread_id = request.path_params["thread_id"]
+        model = chosen_model(thread_id, body)
+        if model is None:
+            return JSONResponse({"error": "Unknown model."}, 400)
         try:
-            run = store.start_run(request.path_params["thread_id"], text, ids)
+            run = store.start_run(thread_id, text, ids, model=model)
         except attachments.InvalidAttachments as exc:
             return JSONResponse({"error": str(exc)}, 400)
         launch(run)
         return JSONResponse(run, 202)
 
     async def retry(request):
-        run = store.start_run(request.path_params["thread_id"])
+        body = None
+        if await request.body():
+            try:
+                body = await request.json()
+            except (ValueError, UnicodeDecodeError):
+                return JSONResponse({"error": "Send a JSON object or no body."}, 400)
+        thread_id = request.path_params["thread_id"]
+        model = chosen_model(thread_id, body)
+        if model is None:
+            return JSONResponse({"error": "Unknown model."}, 400)
+        run = store.start_run(thread_id, model=model)
         launch(run)
         return JSONResponse(run, 202)
 
@@ -324,6 +356,7 @@ def create_conversation_app(
             *plan_routes(plan_query, plan_commands, byte_store),
             Route("/api/health", health),
             Route("/api/events", changes),
+            Route("/api/models", model_list),
             Route("/api/threads", threads, methods=["GET", "POST"]),
             Route("/api/threads/{thread_id}", thread, methods=["GET", "PATCH", "DELETE"]),
             Route("/api/threads/{thread_id}/messages", send, methods=["POST"]),
@@ -333,6 +366,7 @@ def create_conversation_app(
         exception_handlers={MissingThread: missing, RunConflict: conflict},
     )
     app.state.conversation_store = store
+    app.state.models = models
     app.state.memory_store = memory
     app.state.plan_commands = plan_commands
     app.state.plan_query = plan_query

@@ -29,6 +29,7 @@ erDiagram
         INTEGER user_sequence "Prompt message sequence"
         TEXT created_at "UTC ISO 8601"
         TEXT updated_at "UTC ISO 8601"
+        TEXT model "Chat model id, e.g. anthropic:claude-opus-5-5"
     }
 ```
 
@@ -39,7 +40,9 @@ erDiagram
 | Message payload | Original requests/responses, including text, tool calls/results and timestamps. |
 | Run prompt | `user_sequence` identifies the saved prompt in the same thread; no declared foreign key. |
 | Active run | Partial unique index `one_active_run` permits one `running` run per thread. |
-| Constraint names | Primary keys, foreign keys, checks and not-null rules use stable `pk_`, `fk_`, `ck_` and `nn_` names. |
+| Run model | Required full model id the run used (`ck_runs_model` rejects empty). Runs from before model selection (schema 6) were filled with `openai:gpt-6.1-sol`, the only model used until then. |
+| Current model | Not stored: the latest run's model while it is in `CHAT_MODELS`, otherwise `MODEL`. A picker change that is never sent is not saved. |
+| Constraint names | Primary keys, foreign keys and checks use stable `pk_`, `fk_` and `ck_` names. Older not-null rules carry `nn_` names; new ones need none, because SQLite changes nullability with `ALTER COLUMN` and cannot name a `NOT NULL` added that way. |
 | Child FK indexes | The message primary key covers `messages.thread_id`; `runs_by_thread` covers all run states. |
 | Deletion | Foreign keys cascade messages and runs; deleting a running thread is rejected. |
 | Initial title | `New conversation`, replaced by the first prompt's first 80 normalized characters. |
@@ -68,7 +71,8 @@ stateDiagram-v2
     interrupted --> [*]
 ```
 
-- Retry creates a **new run** for the latest failed/interrupted prompt without duplicating it.
+- Retry creates a **new run** for the latest failed/interrupted prompt without duplicating it,
+  on the requested model or the thread's current one.
 - Failed/interrupted runs retain the saved prompt; partial generated output is not saved.
 - Active SSE replay buffers are temporary and separate from SQLite; restarts discard them.
 - Generation receives selected complete historical turns with original parts and the full current

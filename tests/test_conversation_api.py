@@ -11,6 +11,7 @@ from starlette.testclient import TestClient
 
 from training_ai.conversation_api import create_conversation_app
 from training_ai.conversation_store import ConversationStore
+from training_ai.model_catalog import ModelCatalog
 
 
 def wait_for_status(client, thread_id, expected="completed"):
@@ -128,7 +129,7 @@ def test_restart_interrupts_run_and_retry_keeps_one_user_message(tmp_path):
     store = ConversationStore(path)
     store.initialize()
     thread_id = store.create_thread()["id"]
-    store.start_run(thread_id, "Saved before a crash")
+    store.start_run(thread_id, "Saved before a crash", model="test")
     with TestClient(create_conversation_app(Agent(TestModel()), path)) as client:
         endpoint = f"/api/threads/{thread_id}"
         assert client.get(endpoint).json()["run"]["status"] == "interrupted"
@@ -189,3 +190,135 @@ def test_invalid_requests_do_not_mutate_history(tmp_path):
             client.post("/api/threads/missing/messages", json={"text": "hello"}).status_code == 404
         )
         assert client.get(endpoint).json()["messages"] == []
+
+
+def named_model(name, fail=None):
+    """A model that names itself and lists the user prompts and replies it received."""
+
+    async def respond(messages, info):
+        if fail is not None and fail.is_set():
+            raise RuntimeError("synthetic provider failure")
+        seen = [
+            part.content
+            for message in messages
+            for part in message.parts
+            if part.part_kind in ("user-prompt", "text")
+        ]
+        return ModelResponse(parts=[TextPart(f"{name} saw {seen}")])
+
+    return FunctionModel(stream_function=stream_response(respond))
+
+
+def last_reply(detail):
+    return detail["messages"][-1]["payload"]["parts"][-1]["content"]
+
+
+def two_model_app(path, fail=None, keep=None):
+    """GPT (the default, failing while `fail` is set) and Claude; `keep` lists the ids offered."""
+    models = {
+        "test:gpt-6.1-sol": named_model("gpt", fail),
+        "test:claude-opus-5-5": named_model("claude"),
+    }
+    offered = {k: v for k, v in models.items() if keep is None or k in keep}
+    return create_conversation_app(
+        Agent(TestModel()), path, models=ModelCatalog(next(iter(offered)), offered)
+    )
+
+
+def test_models_endpoint_lists_selectable_models_in_order(tmp_path):
+    with TestClient(two_model_app(tmp_path / "chat.sqlite3")) as client:
+        assert client.get("/api/models").json() == {
+            "default": "test:gpt-6.1-sol",
+            "models": [
+                {"id": "test:gpt-6.1-sol", "label": "gpt-6.1-sol"},
+                {"id": "test:claude-opus-5-5", "label": "claude-opus-5-5"},
+            ],
+        }
+
+
+def test_thread_model_defaults_then_remembers_the_choice(tmp_path):
+    path = tmp_path / "chat.sqlite3"
+    with TestClient(two_model_app(path)) as client:
+        thread_id = create_thread(client)
+        assert client.get(f"/api/threads/{thread_id}").json()["model"] == "test:gpt-6.1-sol"
+        response = client.post(
+            f"/api/threads/{thread_id}/messages",
+            json={"text": "How was my threshold session?", "model": "test:claude-opus-5-5"},
+        )
+        assert response.json()["model"] == "test:claude-opus-5-5"
+        detail = wait_for_status(client, thread_id)
+        assert last_reply(detail).startswith("claude saw")
+    with TestClient(two_model_app(path)) as other_device:
+        detail = other_device.get(f"/api/threads/{thread_id}").json()
+        assert detail["model"] == "test:claude-opus-5-5"
+        assert detail["run"]["model"] == "test:claude-opus-5-5"
+        # Without a model the send continues on the thread's current model.
+        other_device.post(f"/api/threads/{thread_id}/messages", json={"text": "And tomorrow?"})
+        assert last_reply(wait_for_status(other_device, thread_id)).startswith("claude saw")
+
+
+def test_removed_model_falls_back_to_default_and_keeps_its_record(tmp_path):
+    path = tmp_path / "chat.sqlite3"
+    with TestClient(two_model_app(path)) as client:
+        thread_id = create_thread(client)
+        client.post(
+            f"/api/threads/{thread_id}/messages",
+            json={"text": "Plan my easy week", "model": "test:claude-opus-5-5"},
+        )
+        wait_for_status(client, thread_id)
+    with TestClient(two_model_app(path, keep=("test:gpt-6.1-sol",))) as client:
+        detail = client.get(f"/api/threads/{thread_id}").json()
+        assert detail["model"] == "test:gpt-6.1-sol"
+        assert detail["run"]["model"] == "test:claude-opus-5-5"
+
+
+def test_switching_mid_thread_replays_history_to_the_new_model(tmp_path):
+    with TestClient(two_model_app(tmp_path / "chat.sqlite3")) as client:
+        thread_id = create_thread(client)
+        client.post(f"/api/threads/{thread_id}/messages", json={"text": "Easy run today?"})
+        first = last_reply(wait_for_status(client, thread_id))
+        assert first == "gpt saw ['Easy run today?']"
+        client.post(
+            f"/api/threads/{thread_id}/messages",
+            json={"text": "And tomorrow?", "model": "test:claude-opus-5-5"},
+        )
+        reply = last_reply(wait_for_status(client, thread_id))
+        assert reply == f"claude saw ['Easy run today?', {first!r}, 'And tomorrow?']"
+
+
+def test_failed_run_can_be_retried_on_another_model(tmp_path):
+    fail = threading.Event()
+    fail.set()
+    with TestClient(two_model_app(tmp_path / "chat.sqlite3", fail)) as client:
+        thread_id = create_thread(client)
+        client.post(f"/api/threads/{thread_id}/messages", json={"text": "Intervals on Thursday?"})
+        assert wait_for_status(client, thread_id, "failed")["run"]["model"] == "test:gpt-6.1-sol"
+        response = client.post(
+            f"/api/threads/{thread_id}/retry", json={"model": "test:claude-opus-5-5"}
+        )
+        assert response.status_code == 202
+        assert response.json()["model"] == "test:claude-opus-5-5"
+        detail = wait_for_status(client, thread_id)
+        assert last_reply(detail) == "claude saw ['Intervals on Thursday?']"
+        assert sum(m["payload"]["kind"] == "request" for m in detail["messages"]) == 1
+
+
+def test_unknown_model_is_rejected_without_saving(tmp_path):
+    fail = threading.Event()
+    fail.set()
+    with TestClient(two_model_app(tmp_path / "chat.sqlite3", fail)) as client:
+        thread_id = create_thread(client)
+        for model in ("test:missing", 42):
+            response = client.post(
+                f"/api/threads/{thread_id}/messages", json={"text": "Hello", "model": model}
+            )
+            assert response.status_code == 400
+            assert response.json() == {"error": "Unknown model."}
+        assert client.get(f"/api/threads/{thread_id}").json()["messages"] == []
+        client.post(f"/api/threads/{thread_id}/messages", json={"text": "Hello"})
+        failed = wait_for_status(client, thread_id, "failed")
+        response = client.post(f"/api/threads/{thread_id}/retry", json={"model": "test:missing"})
+        assert response.status_code == 400
+        after = client.get(f"/api/threads/{thread_id}").json()
+        assert after["run"] == failed["run"]
+        assert after["messages"] == failed["messages"]

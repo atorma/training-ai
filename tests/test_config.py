@@ -121,3 +121,55 @@ def test_attachment_bucket_and_prefix_are_trimmed(monkeypatch):
     loaded = config.load_config()
     assert loaded.attachment_bucket == "fictional-attachments"
     assert loaded.attachment_prefix == "chat"
+
+
+def test_chat_models_default_to_model_only(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.delenv("CHAT_MODELS", raising=False)
+    assert config.load_config().chat_models == ("test",)
+
+
+def test_chat_models_keep_order_and_a_listed_default(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("MODEL", "openai:gpt-6.1-sol")
+    monkeypatch.setenv("CHAT_MODELS", " anthropic:claude-opus-5-5 , openai:gpt-6.1-sol ")
+    assert config.load_config().chat_models == ("anthropic:claude-opus-5-5", "openai:gpt-6.1-sol")
+
+
+def test_unlisted_default_is_added_first(monkeypatch):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("MODEL", "openai:gpt-6.1-sol")
+    monkeypatch.setenv("CHAT_MODELS", "anthropic:claude-opus-5-5,anthropic:claude-sonnet-5-5")
+    assert config.load_config().chat_models == (
+        "openai:gpt-6.1-sol",
+        "anthropic:claude-opus-5-5",
+        "anthropic:claude-sonnet-5-5",
+    )
+
+
+def test_labels_drop_the_provider_prefix():
+    from training_ai.model_catalog import model_label
+
+    assert model_label("anthropic:claude-opus-5-5") == "claude-opus-5-5"
+    assert model_label("openai-responses:gpt-6.1-sol") == "gpt-6.1-sol"
+    assert model_label("test") == "test"
+
+
+@pytest.mark.parametrize(
+    "value,message",
+    [
+        ("openai:gpt-6.1-sol,openai:gpt-6.1-sol", "lists openai:gpt-6.1-sol twice"),
+        (
+            "openai:gpt-6.1-sol,openai-chat:gpt-6.1-sol",
+            "openai:gpt-6.1-sol and openai-chat:gpt-6.1-sol are both shown as gpt-6.1-sol",
+        ),
+        ("anthropic:claude-opus-5-5,,openai:gpt-6.1-sol", "Invalid CHAT_MODELS entry ''"),
+        ("anthropic:", "Invalid CHAT_MODELS entry 'anthropic:'"),
+    ],
+)
+def test_malformed_chat_models_fail_at_startup(monkeypatch, value, message):
+    configure_environment(monkeypatch)
+    monkeypatch.setenv("MODEL", "openai:gpt-6.1-sol")
+    monkeypatch.setenv("CHAT_MODELS", value)
+    with pytest.raises(RuntimeError, match=message):
+        config.load_config()

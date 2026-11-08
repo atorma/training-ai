@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from pydantic_ai import Agent, BinaryContent
+from pydantic_ai.models import Model
 
 from training_ai.plan_models import Kind, PlanContent
 from training_ai.plan_pdf import DocumentPass
@@ -104,6 +105,9 @@ def extraction_prompt(inputs: ExtractionInput) -> list[Any]:
     return parts
 
 
-async def extract(agent: Agent[None, PlanContent], inputs: ExtractionInput) -> PlanContent:
-    result = await agent.run(extraction_prompt(inputs))
+async def extract(
+    agent: Agent[None, PlanContent], model: Model | str | None, inputs: ExtractionInput
+) -> PlanContent:
+    """Run the sub-agent on the chat run's model (`None` keeps the sub-agent's own)."""
+    result = await agent.run(extraction_prompt(inputs), model=model)
     return result.output

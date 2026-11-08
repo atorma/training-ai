@@ -101,7 +101,10 @@ spec:
             - name: TIMEZONE
               value: Europe/Helsinki
             - name: MODEL
-              value: openai:gpt-6.1-sol
+              value: anthropic:claude-opus-5-5
+            # Offered in the chat picker; each needs its provider's API key below.
+            - name: CHAT_MODELS
+              value: openai:gpt-6.1-sol,openai:gpt-6-astra,anthropic:claude-opus-5-5,anthropic:claude-fable-5-1
             - name: MCP_SERVER_URL
               value: http://intervals-mcp-service:8000/mcp
             - name: SIGNAL_API_URL

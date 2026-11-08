@@ -1,8 +1,10 @@
+import json
 import sqlite3
 from pathlib import Path
 
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 from pydantic_ai.models.test import TestModel
 from starlette.testclient import TestClient
 
@@ -18,8 +20,23 @@ def legacy_store(tmp_path):
         db.executescript(Path(__file__).with_name("fixtures").joinpath("schema-v1.sql").read_text())
     store = ConversationStore(path)
     thread = store.create_thread()
-    run = store.start_run(thread["id"], "Existing conversation")
-    store.finish_run(run["id"], "failed")
+    # A version-1 prompt and run, written as the app did before runs recorded their model.
+    payload = ModelMessagesTypeAdapter.dump_json(
+        [ModelRequest(parts=[UserPromptPart("Existing conversation")])]
+    ).decode()
+    with store.connection() as db:
+        db.execute(
+            "UPDATE threads SET title = 'Existing conversation' WHERE id = ?", (thread["id"],)
+        )
+        db.execute(
+            "INSERT INTO messages (thread_id, sequence, payload) VALUES (?, 1, ?)",
+            (thread["id"], json.dumps(json.loads(payload)[0])),
+        )
+        db.execute(
+            "INSERT INTO runs (id, thread_id, status, user_sequence, created_at, updated_at) "
+            "VALUES ('legacy-run', ?, 'failed', 1, 'created', 'updated')",
+            (thread["id"],),
+        )
     return store, thread["id"]
 
 
@@ -27,7 +44,7 @@ def test_fresh_database_and_repeated_initialization(tmp_path):
     store = ConversationStore(tmp_path / "nested" / "chat.sqlite3")
     store.initialize()
     thread = store.create_thread()
-    store.start_run(thread["id"], "Keep this message")
+    store.start_run(thread["id"], "Keep this message", model="test")
     before = store.get_thread(thread["id"])
     store.initialize()
     assert store.get_thread(thread["id"]) == before
@@ -42,7 +59,11 @@ def test_legacy_database_opens_through_api_without_losing_data(legacy_store):
     store, thread_id = legacy_store
     before = store.get_thread(thread_id)
     with TestClient(create_conversation_app(Agent(TestModel()), store.path)) as client:
-        assert client.get(f"/api/threads/{thread_id}").json() == before
+        assert client.get(f"/api/threads/{thread_id}").json() == {
+            **before,
+            "run": {**before["run"], "model": "openai:gpt-6.1-sol"},
+            "model": "default",
+        }
     with store.connection() as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
 
@@ -69,7 +90,7 @@ def test_pending_migrations_run_in_order_once_and_keep_store_writable(legacy_sto
     assert after["run"]["id"] == before["run"]["id"]
     assert after["archived"] == 1
     new_thread = store.create_thread()
-    run = store.start_run(new_thread["id"], "New message after upgrade")
+    run = store.start_run(new_thread["id"], "New message after upgrade", model="test")
     store.finish_run(run["id"], "completed")
     with store.connection() as db:
         migrate(db, migrations)
@@ -98,7 +119,11 @@ def test_failed_migration_rolls_back_schema_data_and_version(legacy_store):
         assert not db.in_transaction
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
         assert "archived" not in {row[1] for row in db.execute("PRAGMA table_info(threads)")}
-    assert store.get_thread(thread_id) == before
+    # The real migrations committed (the legacy run gains its model); only the failing one rolled back.
+    assert store.get_thread(thread_id) == {
+        **before,
+        "run": {**before["run"], "model": "openai:gpt-6.1-sol"},
+    }
 
     def successful_upgrade(db):
         db.execute("ALTER TABLE threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")

@@ -43,7 +43,7 @@ rules:
       detail but a core part included in design or specs. Use Mermaid diagrams to present relationships between
       models but don't cram the diagrams full of details. The text provides details. You can use Markdown tables.
     - "Any schema or persisted-data change goes through the shared append-only migration runner (docs/database-migrations.md): never edit applied migrations"
-    - Name every PK, FK, CHECK, UNIQUE and NOT NULL constraint and index explicitly (pk_, fk_, ck_, uq_, nn_ prefixes)
+    - "Name every PK, FK, CHECK and UNIQUE constraint and index explicitly (pk_, fk_, ck_, uq_ prefixes). NOT NULL constraints need no name: SQLite can change nullability with ALTER COLUMN, and a NOT NULL added that way cannot be named"
     - Give every foreign key a child-side index led by the full FK tuple; reuse covering indexes, do not duplicate them
     - Audit meaningful uniqueness; do not make dates, timestamps or repeated statements unique merely for indexing
     - Prefer endpoint handlers calling concrete query/command objects; add service layers only when behavior warrants them

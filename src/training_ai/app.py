@@ -8,6 +8,7 @@ from starlette.staticfiles import StaticFiles
 from training_ai.attachment_store import create_byte_store
 from training_ai.config import Config
 from training_ai.conversation_api import create_conversation_app
+from training_ai.model_catalog import build_catalog
 from training_ai.plan_extraction import create_extraction_agent
 from training_ai.signal_sender import build_signal_sender
 from training_ai.summary_agent import create_summary_agent
@@ -19,6 +20,8 @@ def create_app(config: Config) -> Starlette:
     logfire.configure(send_to_logfire="if-token-present")
     logfire.instrument_pydantic_ai()
 
+    # Resolved before anything else so a bad model entry or missing API key fails startup.
+    models = build_catalog(config.model, config.chat_models)
     conversation_agent = create_conversation_agent(config)
     app = create_conversation_app(
         conversation_agent,
@@ -28,6 +31,7 @@ def create_app(config: Config) -> Starlette:
         create_byte_store(config),
         create_extraction_agent(config.model),
         config.model,
+        models,
     )
     app.state.conversation_agent = conversation_agent
     app.state.config = config

@@ -67,3 +67,36 @@ def test_unreachable_bucket_logs_a_warning_instead_of_failing(tmp_path, monkeypa
         store = create_byte_store(config)
     assert isinstance(store, GcsByteStore)
     assert "Attachment bucket is unreachable" in caplog.text
+
+
+def _start(tmp_path, **variables):
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(tmp_path),
+        "PYTHON_DOTENV_DISABLED": "1",
+        "MODEL": "test",
+        "MCP_SERVER_URL": "http://127.0.0.1:1/mcp",
+        **variables,
+    }
+    return subprocess.run(
+        [sys.executable, "-m", "training_ai.web"],
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        env=env,
+        timeout=30,
+    )
+
+
+def test_listed_model_without_api_key_fails_startup(tmp_path):
+    result = _start(tmp_path, CHAT_MODELS="anthropic:claude-opus-5-5")
+    assert result.returncode != 0
+    assert "Chat model anthropic:claude-opus-5-5 cannot be used" in result.stderr
+    assert "ANTHROPIC_API_KEY" not in result.stderr
+
+
+def test_unknown_provider_or_bare_name_fails_startup(tmp_path):
+    for entry in ("nope:model-x", "claude-opus-5-5"):
+        result = _start(tmp_path, CHAT_MODELS=entry)
+        assert result.returncode != 0
+        assert f"Chat model {entry} cannot be used" in result.stderr

@@ -22,10 +22,16 @@ import { BrainIcon, CalendarDaysIcon } from "lucide-react";
 import {
   api,
   ApiError,
+  modelsApi,
   type Detail,
   type MemoryReceipt,
+  type ModelList,
   type Thread,
 } from "./api";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { readRun } from "./stream";
 import {
   downloadAttachment,
@@ -276,6 +282,36 @@ function TranscriptEnd() {
   return <RunError />;
 }
 
+type ModelPicker = {
+  models: ModelList["models"];
+  value: string;
+  disabled: boolean;
+  onChange: (model: string) => void;
+};
+
+// Null hides the picker: models are still loading or only one is selectable.
+const ModelPickerContext = createContext<ModelPicker | null>(null);
+
+function ModelPickerSelect() {
+  const picker = useContext(ModelPickerContext);
+  if (!picker) return null;
+  return (
+    <NativeSelect
+      size="sm"
+      aria-label="Model"
+      value={picker.value}
+      disabled={picker.disabled}
+      onChange={(event) => picker.onChange(event.target.value)}
+    >
+      {picker.models.map((model) => (
+        <NativeSelectOption key={model.id} value={model.id}>
+          {model.label}
+        </NativeSelectOption>
+      ))}
+    </NativeSelect>
+  );
+}
+
 function Welcome() {
   return (
     <p className="text-muted-foreground mb-6 px-2">
@@ -303,6 +339,7 @@ const THREAD_COMPONENTS: ThreadComponents = {
   MessageFooter,
   TranscriptEnd,
   UserMessageAttachments: SentAttachments,
+  ComposerExtra: ModelPickerSelect,
 };
 
 function FooterMenu({
@@ -390,6 +427,12 @@ function App() {
     message: ThreadMessageLike;
   } | null>(null);
   const [connection, setConnection] = useState<ConnectionPhase>("online");
+  const [models, setModels] = useState<ModelList | null>(null);
+  // An unsent picker choice for one thread (null: a new conversation); never saved.
+  const [modelChoice, setModelChoice] = useState<{
+    threadId: string | null;
+    model: string;
+  } | null>(null);
   const requestVersion = useRef(0);
   const pendingNewThread = useRef<string | null>(null);
   const selectedRef = useRef(selected);
@@ -494,6 +537,7 @@ function App() {
     setDetail(null);
     setReceiptNotices([]);
     setError("");
+    setModelChoice(null);
     history.replaceState(
       null,
       "",
@@ -620,6 +664,19 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    modelsApi()
+      .then(setModels)
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  // What the picker shows and the next send or retry uses: an unsent choice for this
+  // thread, else the thread's current model, else the default for a new conversation.
+  const chosenModel =
+    modelChoice && modelChoice.threadId === selected ? modelChoice.model : null;
+  const shownModel =
+    chosenModel ?? (selected ? detail?.model : undefined) ?? models?.default;
+
   async function onNew(message: AppendMessage) {
     const text = message.content
       .filter((p) => p.type === "text")
@@ -643,8 +700,10 @@ function App() {
         await api<Run & { thread_id: string }>(`/${id}/messages`, "POST", {
           text,
           attachment_ids: attachmentIds,
+          model: shownModel,
         }),
       );
+      setModelChoice(null);
       if (!selectedRef.current) select(id);
     } catch (e) {
       setError(String(e));
@@ -680,10 +739,21 @@ function App() {
                 await api<Run & { thread_id: string }>(
                   `/${detail.id}/retry`,
                   "POST",
+                  { model: shownModel },
                 ),
               );
+              setModelChoice(null);
             }).finally(() => setRetrying(false));
           },
+        }
+      : null;
+  const modelPicker: ModelPicker | null =
+    models && models.models.length > 1 && shownModel
+      ? {
+          models: models.models,
+          value: shownModel,
+          disabled: running || busy || (!!selected && !detail),
+          onChange: (model) => setModelChoice({ threadId: selected, model }),
         }
       : null;
   const runtime = useExternalStoreRuntime({
@@ -745,133 +815,137 @@ function App() {
     <AssistantRuntimeProvider runtime={runtime}>
       <AttachmentAddErrors onError={setError} />
       <RunFailureContext.Provider value={runFailure}>
-        <RunSinceContext.Provider
-          value={runningId && runSince?.id === runningId ? runSince.at : null}
-        >
-          <SidebarProvider
-            className="h-dvh min-h-0"
-            defaultOpen={sidebarOpenFromCookie()}
+        <ModelPickerContext.Provider value={modelPicker}>
+          <RunSinceContext.Provider
+            value={runningId && runSince?.id === runningId ? runSince.at : null}
           >
-            <CloseMobileSidebarOn value={navigation} />
-            <ThreadListSidebar
-              footer={
-                <FooterMenu
-                  onMemory={() => openMemory()}
-                  onPlans={() => setPlansOpen(true)}
-                />
-              }
-            />
-            <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-              <header className="flex items-center gap-2 border-b px-4 py-3">
-                <SidebarTrigger aria-label="Open conversations" />
-                <h2
-                  className="truncate text-base font-medium"
-                  title={detail?.title ?? "New conversation"}
-                >
-                  {detail?.title ?? "New conversation"}
-                </h2>
-              </header>
-              <div className="flex flex-col gap-2 px-4 pt-3 empty:hidden">
-                {error && (
-                  <ErrorState
+            <SidebarProvider
+              className="h-dvh min-h-0"
+              defaultOpen={sidebarOpenFromCookie()}
+            >
+              <CloseMobileSidebarOn value={navigation} />
+              <ThreadListSidebar
+                footer={
+                  <FooterMenu
+                    onMemory={() => openMemory()}
+                    onPlans={() => setPlansOpen(true)}
+                  />
+                }
+              />
+              <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+                <header className="flex items-center gap-2 border-b px-4 py-3">
+                  <SidebarTrigger aria-label="Open conversations" />
+                  <h2
+                    className="truncate text-base font-medium"
+                    title={detail?.title ?? "New conversation"}
+                  >
+                    {detail?.title ?? "New conversation"}
+                  </h2>
+                </header>
+                <div className="flex flex-col gap-2 px-4 pt-3 empty:hidden">
+                  {error && (
+                    <ErrorState
+                      className="max-w-none"
+                      title="Something went wrong"
+                      detail={error}
+                      retrying={false}
+                    />
+                  )}
+                  <ConnectionState
+                    role="status"
                     className="max-w-none"
-                    title="Something went wrong"
-                    detail={error}
-                    retrying={false}
+                    phase={connection}
+                  />
+                </div>
+                <div className="relative z-10 h-0">
+                  <div
+                    className="pointer-events-none absolute top-2 right-4 flex max-w-[min(420px,calc(100%-2rem))] flex-col gap-1.5"
+                    role="status"
+                    aria-label="Memory updates"
+                  >
+                    {receiptNotices.map(({ key, receipt }) => (
+                      <Item
+                        key={key}
+                        size="sm"
+                        variant="outline"
+                        className="bg-popover pointer-events-auto shadow-md"
+                      >
+                        <ItemContent className="wrap-anywhere">
+                          <p>
+                            {receipt.status === "forgotten" ||
+                            receipt.action === "forget" ? (
+                              "Memory forgotten"
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-left hover:underline"
+                                onClick={() => openMemory(receipt.entry_id)}
+                              >
+                                {receipt.action === "record"
+                                  ? "Remembered"
+                                  : receipt.entry?.status === "ended"
+                                    ? "Ended"
+                                    : "Updated"}
+                                : {receipt.entry?.statement}
+                              </button>
+                            )}
+                            {receipt.status === "superseded" &&
+                              " · Superseded; showing current revision"}
+                          </p>
+                        </ItemContent>
+                      </Item>
+                    ))}
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <ThreadView components={THREAD_COMPONENTS} />
+                </div>
+              </SidebarInset>
+            </SidebarProvider>
+            {/* Outside clicks would discard unsaved corrections; Escape and Close still work. */}
+            <Dialog
+              open={memoryOpen}
+              onOpenChange={setMemoryOpen}
+              disablePointerDismissal
+            >
+              <DialogContent
+                showCloseButton={false}
+                className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
+              >
+                {memoryOpen && (
+                  <MemoryView
+                    key={memoryEntry}
+                    entryId={memoryEntry}
+                    onClose={() => setMemoryOpen(false)}
+                    onSource={(id) => {
+                      setMemoryOpen(false);
+                      select(id);
+                    }}
                   />
                 )}
-                <ConnectionState
-                  role="status"
-                  className="max-w-none"
-                  phase={connection}
-                />
-              </div>
-              <div className="relative z-10 h-0">
-                <div
-                  className="pointer-events-none absolute top-2 right-4 flex max-w-[min(420px,calc(100%-2rem))] flex-col gap-1.5"
-                  role="status"
-                  aria-label="Memory updates"
-                >
-                  {receiptNotices.map(({ key, receipt }) => (
-                    <Item
-                      key={key}
-                      size="sm"
-                      variant="outline"
-                      className="bg-popover pointer-events-auto shadow-md"
-                    >
-                      <ItemContent className="wrap-anywhere">
-                        <p>
-                          {receipt.status === "forgotten" ||
-                          receipt.action === "forget" ? (
-                            "Memory forgotten"
-                          ) : (
-                            <button
-                              type="button"
-                              className="text-left hover:underline"
-                              onClick={() => openMemory(receipt.entry_id)}
-                            >
-                              {receipt.action === "record"
-                                ? "Remembered"
-                                : receipt.entry?.status === "ended"
-                                  ? "Ended"
-                                  : "Updated"}
-                              : {receipt.entry?.statement}
-                            </button>
-                          )}
-                          {receipt.status === "superseded" &&
-                            " · Superseded; showing current revision"}
-                        </p>
-                      </ItemContent>
-                    </Item>
-                  ))}
-                </div>
-              </div>
-              <div className="min-h-0 flex-1">
-                <ThreadView components={THREAD_COMPONENTS} />
-              </div>
-            </SidebarInset>
-          </SidebarProvider>
-          {/* Outside clicks would discard unsaved corrections; Escape and Close still work. */}
-          <Dialog
-            open={memoryOpen}
-            onOpenChange={setMemoryOpen}
-            disablePointerDismissal
-          >
-            <DialogContent
-              showCloseButton={false}
-              className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
+              </DialogContent>
+            </Dialog>
+            <Dialog
+              open={plansOpen}
+              onOpenChange={(open) =>
+                open ? setPlansOpen(true) : closePlans()
+              }
             >
-              {memoryOpen && (
-                <MemoryView
-                  key={memoryEntry}
-                  entryId={memoryEntry}
-                  onClose={() => setMemoryOpen(false)}
-                  onSource={(id) => {
-                    setMemoryOpen(false);
-                    select(id);
-                  }}
-                />
-              )}
-            </DialogContent>
-          </Dialog>
-          <Dialog
-            open={plansOpen}
-            onOpenChange={(open) => (open ? setPlansOpen(true) : closePlans())}
-          >
-            <DialogContent
-              showCloseButton={false}
-              className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
-            >
-              {plansOpen && (
-                <PlansView
-                  planId={planId}
-                  onSelect={showPlan}
-                  onClose={closePlans}
-                />
-              )}
-            </DialogContent>
-          </Dialog>
-        </RunSinceContext.Provider>
+              <DialogContent
+                showCloseButton={false}
+                className="max-h-[calc(100dvh-1.5rem)] w-[min(1100px,calc(100vw-1.5rem))] max-w-none overflow-y-auto p-4 sm:max-w-none sm:p-6 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:rounded-none"
+              >
+                {plansOpen && (
+                  <PlansView
+                    planId={planId}
+                    onSelect={showPlan}
+                    onClose={closePlans}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </RunSinceContext.Provider>
+        </ModelPickerContext.Provider>
       </RunFailureContext.Provider>
     </AssistantRuntimeProvider>
   );

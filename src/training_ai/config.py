@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 
 from training_ai.memory_models import MemoryLimits
+from training_ai.model_catalog import parse_chat_models
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,8 @@ class Config:
     attachment_bucket: str | None = None
     attachment_prefix: str = ""
     attachment_dir: str | Path | None = None
+    # Selectable chat model ids in order, the default included; empty means only `model`.
+    chat_models: tuple[str, ...] = ()
 
     def attachment_directory(self) -> Path:
         """Local attachment bytes; defaults to `attachments/` next to the database."""
@@ -99,8 +102,11 @@ def load_config() -> Config:
             "MEMORY_CONTEXT_BUDGET, MEMORY_OBSERVATION_BUDGET, CONVERSATION_HISTORY_BUDGET"
         ) from exc
 
+    chat_models = parse_chat_models(model, os.getenv("CHAT_MODELS", ""))
+
     return Config(
         model=model,
+        chat_models=chat_models,
         mcp_server_url=mcp_server_url,
         mcp_basic_auth_username=os.getenv("MCP_BASIC_AUTH_USERNAME", "").strip() or None,
         mcp_basic_auth_password=os.getenv("MCP_BASIC_AUTH_PASSWORD", "").strip() or None,
