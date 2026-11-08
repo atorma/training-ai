@@ -111,6 +111,11 @@ spec:
                 secretKeyRef:
                   name: training-ai-secrets
                   key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: training-ai-secrets
+                  key: ANTHROPIC_API_KEY
             - name: SIGNAL_NUMBER
               valueFrom:
                 secretKeyRef:
