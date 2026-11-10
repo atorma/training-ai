@@ -65,11 +65,19 @@ def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
     )
 
     @agent.instructions
+    def message_format_instructions(ctx: RunContext[SummaryDeps]) -> str | None:
+        if ctx.deps.send_signal:
+            return (
+                "The final response must use text formatting compatible with the Signal messenger."
+            )
+        return None
+
+    @agent.instructions
     def date_range_instructions(ctx: RunContext[SummaryDeps]) -> str:
         return (
             "Use activity data from date "
             f"{ctx.deps.activity_start_date} to {ctx.deps.activity_end_date}. "
-            "Use fitness data from "
+            "Use fitness data from date "
             f"{ctx.deps.fitness_start_date} to {ctx.deps.fitness_end_date}."
         )
 
@@ -78,12 +86,6 @@ def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
     @agent.instructions
     def plan_context_instructions(ctx: RunContext[SummaryDeps]) -> str:
         return SUMMARY_PLAN_INSTRUCTIONS + "\nPLAN DATA (JSON): " + ctx.deps.plan_context
-
-    @agent.instructions
-    def message_format_instructions(ctx: RunContext[SummaryDeps]) -> str | None:
-        if ctx.deps.send_signal:
-            return "Respond in plain text."
-        return None
 
     # Registered last so the memory context JSON ends the instructions, as in the chat agent.
     add_memory_reading(agent)
