@@ -62,6 +62,7 @@ def create_summary_agent(config: Config) -> Agent[SummaryDeps, str]:
         deps_type=SummaryDeps,
         instructions=base_instructions,
         toolsets=[mcp_server],
+        model_settings={"cache": True},
     )
 
     @agent.instructions

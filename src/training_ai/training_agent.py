@@ -28,7 +28,12 @@ def create_conversation_agent(config: Config) -> Agent:
     )
     base_instructions = os.getenv("BASE_INSTRUCTIONS", BASE_INSTRUCTIONS)
     timezone = ZoneInfo(config.timezone)
-    agent = Agent(config.model, instructions=base_instructions, toolsets=[mcp_server])
+    agent = Agent(
+        config.model,
+        instructions=base_instructions,
+        toolsets=[mcp_server],
+        model_settings={"cache": True},
+    )
     # Plan tools first: the memory instructions must stay last so their context JSON ends
     # the instructions.
     add_plan_tools(agent)
