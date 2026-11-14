@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from pydantic_ai import Agent, BinaryContent
+from pydantic_ai import Agent, BinaryContent, ToolOutput
 from pydantic_ai.models import Model
 
 from training_ai.plan_models import Kind, PlanContent
@@ -73,7 +73,14 @@ class ExtractionInput:
 
 
 def create_extraction_agent(model: Any) -> Agent[None, PlanContent]:
-    return Agent(model, output_type=PlanContent, instructions=EXTRACTION_INSTRUCTIONS, retries=2)
+    # A non-strict output tool on every provider: Anthropic models with structured outputs would
+    # otherwise get strict native output, whose PlanContent grammar the API rejects as too large.
+    return Agent(
+        model,
+        output_type=ToolOutput(PlanContent, strict=False),
+        instructions=EXTRACTION_INSTRUCTIONS,
+        retries=2,
+    )
 
 
 def extraction_prompt(inputs: ExtractionInput) -> list[Any]:

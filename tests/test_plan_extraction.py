@@ -1,15 +1,21 @@
 """The extraction sub-agent receives the text pass, spans and programme workouts, and fails cleanly."""
 
 import asyncio
+import json
 from datetime import date
 
+import httpx2
 import pytest
+from anthropic import AsyncAnthropic
 from fictional_pdf import build_pdf
 from plan_fixtures import block_content
 from pydantic_ai import BinaryContent, ModelRetry
-from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models import override_allow_model_requests
+from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from training_ai.plan_extraction import (
     EXTRACTION_INSTRUCTIONS,
@@ -75,3 +81,28 @@ def test_invalid_structured_output_fails_after_retries():
         asyncio.run(extract(agent, None, inputs(pdf)))
     assert len(calls) == 3  # One attempt plus two retries.
     assert ModelRetry  # Validation failures reach the model as retry prompts, never as plans.
+
+
+@pytest.mark.parametrize("model_name", ["claude-fable-5-1", "claude-opus-5-5"])
+def test_anthropic_request_uses_non_strict_output_tool(model_name):
+    # Strict native output makes the API compile a PlanContent grammar it rejects as too large.
+    bodies = []
+
+    def handle(request):
+        bodies.append(json.loads(request.content))
+        error = {"type": "invalid_request_error", "message": "captured"}
+        return httpx2.Response(400, json={"type": "error", "error": error})
+
+    client = AsyncAnthropic(
+        api_key="test",
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handle)),
+        max_retries=0,
+    )
+    model = AnthropicModel(model_name, provider=AnthropicProvider(anthropic_client=client))
+    pdf = build_pdf([[("plan", False)]])
+    # The transport answers in-process, so no request leaves the test.
+    with override_allow_model_requests(True), pytest.raises(ModelHTTPError):
+        asyncio.run(extract(create_extraction_agent(model), None, inputs(pdf)))
+    body = bodies[0]
+    assert "format" not in body.get("output_config", {})
+    assert [(t["name"], t.get("strict")) for t in body["tools"]] == [("final_result", None)]
