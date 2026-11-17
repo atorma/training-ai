@@ -148,11 +148,9 @@ The application reads training data through the
 [futureweb/intervals-mcp-server](https://github.com/futureweb/intervals-mcp-server) image,
 deployed from its own Kustomize root with `make deploy-k8s-mcp`. Keeping it separate means
 application deploys and deletes leave it alone. The image is published and pinned by digest,
-so there is nothing to build. The deployment expects the
-`intervals-api-secret` and `intervals-mcp-basic-auth` secrets to exist.
+so there is nothing to build.
 
-The ingress basic auth guards the public endpoint, so the server's own OAuth stays off, which
-also keeps the server stateless. Leave `MCP_PUBLIC_URL` unset: it enables Host header checks that
+The MCP server is not exposed in the internet. Leave `MCP_PUBLIC_URL` unset: it enables Host header checks that
 would reject the in-cluster service name the application uses.
 
 ## Removing the application
